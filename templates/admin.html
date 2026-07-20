@@ -6,12 +6,38 @@
   <title>𝕏 لوحة التحكم</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="/static/css/admin.css"/>
 </head>
 <body>
 
-<!-- ── Access Denied ─────────────────────────────────────── -->
+<!-- ── Login Screen ────────────────────────────────────── -->
+<div id="loginScreen" class="fullscreen-state hidden">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="logo-x-big">𝕏</div>
+    </div>
+    <h1 class="login-title">لوحة تحكم الأدمن</h1>
+    <p class="login-sub">أدخل كلمة المرور للمتابعة</p>
+    <form id="loginForm" autocomplete="off">
+      <div class="login-field">
+        <input type="password" id="loginPass" placeholder="كلمة المرور" autocomplete="current-password" required/>
+        <button type="button" id="togglePass" class="pass-eye">
+          <svg id="eyeOpen" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <svg id="eyeClosed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hidden"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        </button>
+      </div>
+      <div id="loginErr" class="login-err hidden">❌ كلمة المرور غير صحيحة</div>
+      <button type="submit" id="loginBtn" class="login-submit">
+        <span id="loginBtnText">دخول</span>
+        <span id="loginBtnLoad" class="hidden">⏳</span>
+      </button>
+    </form>
+    <p class="login-hint">💡 عيّن <code>ADMIN_PASSWORD</code> في الأسرار لتغيير كلمة المرور</p>
+  </div>
+</div>
+
+<!-- ── Access Denied ────────────────────────────────────── -->
 <div id="accessDenied" class="fullscreen-state hidden">
   <div class="denied-card">
     <div class="denied-icon">🚫</div>
@@ -20,14 +46,14 @@
   </div>
 </div>
 
-<!-- ── Admin App ──────────────────────────────────────────── -->
+<!-- ── Admin App ────────────────────────────────────────── -->
 <div id="adminApp" class="admin-shell hidden">
 
   <!-- Sidebar -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="logo-x">𝕏</div>
-      <div>
+      <div class="logo-text">
         <span class="sidebar-title">Admin Panel</span>
         <span class="sidebar-sub">Twitter X Shop</span>
       </div>
@@ -35,78 +61,100 @@
 
     <nav class="nav-group">
       <a class="nav-link active" data-tab="dashboard">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-        الرئيسية
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>الرئيسية</span>
       </a>
       <a class="nav-link" data-tab="accounts">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        الحسابات
+        <span>الحسابات</span>
         <span class="nav-badge" id="navBadgeAccounts"></span>
       </a>
       <a class="nav-link" data-tab="add">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-        إضافة حساب
+        <span>إضافة حساب</span>
       </a>
       <a class="nav-link" data-tab="orders">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-        الطلبات
+        <span>الطلبات</span>
         <span class="nav-badge nav-badge-warn" id="navBadgeOrders"></span>
       </a>
     </nav>
 
-    <div class="sidebar-footer">
-      <div class="sidebar-version">v2.0 — Twitter X Shop</div>
+    <div class="sidebar-bottom">
+      <button class="logout-btn" id="logoutBtn" title="تسجيل الخروج">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>خروج</span>
+      </button>
+      <div class="sidebar-version">v3.0 — X Shop Pro</div>
     </div>
   </aside>
 
-  <!-- Main Content -->
-  <main class="content">
+  <!-- Mobile top bar -->
+  <div class="mobile-bar">
+    <button class="menu-btn" id="menuBtn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div class="mobile-logo">𝕏 Admin</div>
+    <button class="logout-btn-sm" id="logoutBtnMobile">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    </button>
+  </div>
 
-    <!-- ── Dashboard Tab ──────────────────────────────── -->
+  <!-- Main Content -->
+  <main class="content" id="mainContent">
+
+    <!-- ── Dashboard Tab ─────────────────────────────── -->
     <div class="tab active" id="tab-dashboard">
       <div class="page-header">
-        <h1 class="page-title">لوحة التحكم</h1>
-        <p class="page-sub">نظرة عامة على المتجر</p>
+        <div>
+          <h1 class="page-title">لوحة التحكم</h1>
+          <p class="page-sub">نظرة عامة على المتجر</p>
+        </div>
+        <button class="header-btn" onclick="refreshAll()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          تحديث
+        </button>
       </div>
 
       <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-icon" style="background:rgba(29,155,240,.15);color:var(--blue)">📦</div>
+        <div class="stat-card stat-blue">
+          <div class="stat-icon">📦</div>
           <div class="stat-body">
             <div class="stat-val" id="statTotal">—</div>
             <div class="stat-label">إجمالي الحسابات</div>
           </div>
+          <div class="stat-trend" id="trendTotal"></div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon" style="background:rgba(34,197,94,.15);color:var(--green)">✅</div>
+        <div class="stat-card stat-green">
+          <div class="stat-icon">✅</div>
           <div class="stat-body">
             <div class="stat-val" id="statAvail">—</div>
-            <div class="stat-label">متاح</div>
+            <div class="stat-label">متاح للبيع</div>
           </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon" style="background:rgba(239,68,68,.15);color:var(--red)">🔴</div>
+        <div class="stat-card stat-red">
+          <div class="stat-icon">🔴</div>
           <div class="stat-body">
             <div class="stat-val" id="statSold">—</div>
             <div class="stat-label">مباع</div>
           </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon" style="background:rgba(245,158,11,.15);color:var(--gold)">⏳</div>
+        <div class="stat-card stat-gold">
+          <div class="stat-icon">⏳</div>
           <div class="stat-body">
             <div class="stat-val" id="statReserved">—</div>
             <div class="stat-label">محجوز</div>
           </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon" style="background:rgba(34,197,94,.15);color:var(--green)">💰</div>
+        <div class="stat-card stat-green2">
+          <div class="stat-icon">💰</div>
           <div class="stat-body">
             <div class="stat-val" id="statRev">—</div>
             <div class="stat-label">الإيرادات</div>
           </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon" style="background:rgba(139,92,246,.15);color:var(--purple)">📋</div>
+        <div class="stat-card stat-purple">
+          <div class="stat-icon">📋</div>
           <div class="stat-body">
             <div class="stat-val" id="statOrders">—</div>
             <div class="stat-label">إجمالي الطلبات</div>
@@ -114,36 +162,63 @@
         </div>
       </div>
 
-      <div class="dash-actions">
-        <button class="dash-btn" onclick="switchTab('accounts')">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          إدارة الحسابات
-        </button>
-        <button class="dash-btn" onclick="switchTab('add')">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-          إضافة حساب جديد
-        </button>
-        <button class="dash-btn" onclick="switchTab('orders')">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-          عرض الطلبات
-        </button>
+      <div class="quick-actions">
+        <div class="qa-title">إجراءات سريعة</div>
+        <div class="qa-grid">
+          <button class="qa-card" onclick="switchTab('add')">
+            <div class="qa-icon qa-add">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            </div>
+            <div class="qa-label">إضافة حساب جديد</div>
+            <div class="qa-sub">أضف حساب للمتجر</div>
+          </button>
+          <button class="qa-card" onclick="switchTab('accounts')">
+            <div class="qa-icon qa-manage">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+            <div class="qa-label">إدارة الحسابات</div>
+            <div class="qa-sub">تعديل وحذف</div>
+          </button>
+          <button class="qa-card" onclick="switchTab('orders')">
+            <div class="qa-icon qa-orders">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            </div>
+            <div class="qa-label">عرض الطلبات</div>
+            <div class="qa-sub">متابعة الطلبات</div>
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- ── Accounts Tab ───────────────────────────────── -->
     <div class="tab" id="tab-accounts">
       <div class="page-header">
-        <h1 class="page-title">إدارة الحسابات</h1>
-        <button class="header-btn" onclick="loadAccounts()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c-1.657 0-3-4.03-3-9s1.343-9 3-9m0 18c1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 0 1 9-9"/></svg>
-          تحديث
-        </button>
+        <div>
+          <h1 class="page-title">إدارة الحسابات</h1>
+          <p class="page-sub">كل الحسابات في المتجر</p>
+        </div>
+        <div class="header-actions">
+          <button class="header-btn" onclick="switchTab('add')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            إضافة
+          </button>
+          <button class="header-btn" onclick="loadAccounts()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            تحديث
+          </button>
+        </div>
       </div>
 
       <div class="search-row">
         <div class="search-box">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           <input id="accountSearch" type="text" placeholder="ابحث بالاسم، السنة، الحالة…"/>
+        </div>
+        <div class="filter-chips">
+          <button class="chip active" data-filter="all">الكل</button>
+          <button class="chip" data-filter="available">متاح</button>
+          <button class="chip" data-filter="sold">مباع</button>
+          <button class="chip" data-filter="reserved">محجوز</button>
         </div>
       </div>
 
@@ -152,7 +227,7 @@
           <thead>
             <tr>
               <th>#</th>
-              <th>الاسم</th>
+              <th>الحساب</th>
               <th>السنة</th>
               <th>السعر</th>
               <th>الحالة</th>
@@ -165,18 +240,24 @@
         <div id="accountsEmpty" class="table-empty hidden">
           <div class="empty-icon">📭</div>
           <p>لا توجد حسابات بعد</p>
+          <button class="btn btn-primary mt-12" onclick="switchTab('add')">+ إضافة أول حساب</button>
         </div>
       </div>
     </div>
 
-    <!-- ── Add Account Tab ────────────────────────────── -->
+    <!-- ── Add Account Tab ───────────────────────────── -->
     <div class="tab" id="tab-add">
       <div class="page-header">
-        <h1 class="page-title">إضافة حساب جديد</h1>
+        <div>
+          <h1 class="page-title">إضافة حساب جديد</h1>
+          <p class="page-sub">أضف حساب تويتر/X إلى المتجر</p>
+        </div>
       </div>
 
       <div class="form-card">
         <form id="addForm" autocomplete="off">
+
+          <div class="form-section-title">معلومات الحساب</div>
 
           <div class="field-row">
             <div class="field">
@@ -185,42 +266,49 @@
             </div>
             <div class="field">
               <label for="addPrice">السعر (USD) *</label>
-              <input type="number" id="addPrice" name="price" placeholder="0.00" min="0" step="0.01" required/>
+              <div class="input-prefix">
+                <span class="prefix-icon">$</span>
+                <input type="number" id="addPrice" name="price" placeholder="0.00" min="0" step="0.01" required/>
+              </div>
             </div>
           </div>
 
           <div class="field-row">
             <div class="field">
               <label for="addYear">سنة الإنشاء</label>
-              <input type="number" id="addYear" name="creation_year" placeholder="2012" min="2006" max="2023"/>
+              <input type="number" id="addYear" name="creation_year" placeholder="مثال: 2012" min="2006" max="2025"/>
             </div>
             <div class="field">
               <label for="addCategory">التصنيف</label>
               <select id="addCategory" name="category">
-                <option value="twitter">Twitter/X</option>
-                <option value="aged">Aged Account</option>
-                <option value="verified">Verified</option>
-                <option value="other">أخرى</option>
+                <option value="twitter">🐦 Twitter/X</option>
+                <option value="aged">🕰️ Aged Account</option>
+                <option value="verified">✅ Verified</option>
+                <option value="other">📌 أخرى</option>
               </select>
             </div>
           </div>
 
           <div class="field">
             <label for="addDesc">الوصف</label>
-            <textarea id="addDesc" name="description" placeholder="أدخل وصفاً للحساب…" rows="3"></textarea>
+            <textarea id="addDesc" name="description" placeholder="أدخل وصفاً تفصيلياً للحساب…" rows="3"></textarea>
           </div>
 
+          <div class="form-section-title">صورة الحساب</div>
+
           <div class="field">
-            <label>صورة الحساب</label>
             <div id="dropZone" class="drop-zone">
               <div id="dropContent" class="drop-content">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <p>اسحب وأفلت الصورة هنا<br/><span>أو انقر للاختيار</span></p>
+                <div class="drop-icon">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <p class="drop-title">اسحب وأفلت الصورة هنا</p>
+                <p class="drop-hint">أو <span class="drop-link">انقر للاختيار</span> · PNG، JPG، WEBP</p>
                 <input type="file" id="imageInput" name="image" accept="image/*" hidden/>
               </div>
               <div id="imagePreview" class="drop-preview hidden">
                 <img id="previewImg" src="" alt="preview"/>
-                <button type="button" id="removePreview" class="remove-preview">✕</button>
+                <button type="button" id="removePreview" class="remove-preview">✕ إزالة</button>
               </div>
             </div>
           </div>
@@ -241,9 +329,12 @@
     <!-- ── Orders Tab ─────────────────────────────────── -->
     <div class="tab" id="tab-orders">
       <div class="page-header">
-        <h1 class="page-title">إدارة الطلبات</h1>
+        <div>
+          <h1 class="page-title">إدارة الطلبات</h1>
+          <p class="page-sub">متابعة وتحديث حالة الطلبات</p>
+        </div>
         <button class="header-btn" onclick="loadOrders()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c-1.657 0-3-4.03-3-9s1.343-9 3-9m0 18c1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 0 1 9-9"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           تحديث
         </button>
       </div>
@@ -255,6 +346,7 @@
               <th>#</th>
               <th>الحساب</th>
               <th>المشتري</th>
+              <th>السعر</th>
               <th>الحالة</th>
               <th>التاريخ</th>
               <th>تغيير الحالة</th>
@@ -269,59 +361,96 @@
       </div>
     </div>
 
-  </main><!-- /content -->
-</div><!-- /adminApp -->
+  </main>
+</div>
 
-<!-- ── Edit Modal ─────────────────────────────────────────── -->
+<!-- ── Edit Modal ─────────────────────────────────────── -->
 <div id="editModal" class="modal-overlay hidden">
   <div class="modal-card">
     <div class="modal-header">
-      <h2>تعديل الحساب</h2>
-      <button id="editClose" class="modal-close">✕</button>
+      <div class="modal-header-left">
+        <div class="modal-icon">✏️</div>
+        <h2>تعديل الحساب</h2>
+      </div>
+      <button id="editClose" class="modal-close" title="إغلاق">✕</button>
     </div>
     <form id="editForm" autocomplete="off">
       <input type="hidden" id="editId" name="id"/>
 
-      <div class="field-row">
-        <div class="field">
-          <label>الاسم *</label>
-          <input type="text" id="editName" name="name" required/>
+      <div class="modal-body">
+        <div class="field-row">
+          <div class="field">
+            <label>اسم الحساب *</label>
+            <input type="text" id="editName" name="name" required/>
+          </div>
+          <div class="field">
+            <label>السعر (USD)</label>
+            <div class="input-prefix">
+              <span class="prefix-icon">$</span>
+              <input type="number" id="editPrice" name="price" min="0" step="0.01"/>
+            </div>
+          </div>
         </div>
-        <div class="field">
-          <label>السعر (USD)</label>
-          <input type="number" id="editPrice" name="price" min="0" step="0.01"/>
-        </div>
-      </div>
 
-      <div class="field-row">
-        <div class="field">
-          <label>سنة الإنشاء</label>
-          <input type="number" id="editYear" name="creation_year" min="2006" max="2023"/>
+        <div class="field-row">
+          <div class="field">
+            <label>سنة الإنشاء</label>
+            <input type="number" id="editYear" name="creation_year" min="2006" max="2025"/>
+          </div>
+          <div class="field">
+            <label>الحالة</label>
+            <select id="editStatus" name="status">
+              <option value="available">✅ متاح</option>
+              <option value="reserved">⏳ محجوز</option>
+              <option value="sold">🔴 مباع</option>
+            </select>
+          </div>
         </div>
+
         <div class="field">
-          <label>الحالة</label>
-          <select id="editStatus" name="status">
-            <option value="available">متاح</option>
-            <option value="reserved">محجوز</option>
-            <option value="sold">مباع</option>
+          <label>التصنيف</label>
+          <select id="editCategory" name="category">
+            <option value="twitter">🐦 Twitter/X</option>
+            <option value="aged">🕰️ Aged Account</option>
+            <option value="verified">✅ Verified</option>
+            <option value="other">📌 أخرى</option>
           </select>
         </div>
-      </div>
 
-      <div class="field">
-        <label>الوصف</label>
-        <textarea id="editDesc" name="description" rows="3"></textarea>
+        <div class="field">
+          <label>الوصف</label>
+          <textarea id="editDesc" name="description" rows="3"></textarea>
+        </div>
       </div>
 
       <div class="modal-footer">
-        <button type="submit" class="btn btn-primary">💾 حفظ</button>
+        <button type="submit" class="btn btn-primary">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          حفظ التعديلات
+        </button>
         <button type="button" id="editCancel" class="btn btn-ghost">إلغاء</button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- ── Toast ──────────────────────────────────────────────── -->
+<!-- ── Confirm Dialog ─────────────────────────────────── -->
+<div id="confirmModal" class="modal-overlay hidden">
+  <div class="modal-card confirm-card">
+    <div class="confirm-icon" id="confirmIcon">🗑️</div>
+    <h3 id="confirmTitle">تأكيد الحذف</h3>
+    <p id="confirmMsg">هل أنت متأكد من حذف هذا الحساب نهائياً؟</p>
+    <div class="modal-footer">
+      <button id="confirmOk" class="btn btn-danger">تأكيد</button>
+      <button id="confirmCancel" class="btn btn-ghost">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Sidebar overlay (mobile) ───────────────────────── -->
+<div id="sidebarOverlay" class="sidebar-overlay hidden"></div>
+
+<!-- ── Toast ──────────────────────────────────────────── -->
 <div id="toast" class="toast"></div>
 
 <script src="/static/js/admin.js"></script>

@@ -6,7 +6,7 @@ import os
 import logging
 from functools import wraps
 from urllib.parse import unquote
-from flask import request, jsonify
+from flask import request, jsonify, session
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,6 @@ def verify_telegram_init_data(init_data: str) -> dict | None:
     or None if validation fails or token is missing.
     """
     if not BOT_TOKEN:
-        logger.warning("BOT_TOKEN not set — cannot verify initData.")
         return None
     try:
         params: dict[str, str] = {}
@@ -35,7 +34,6 @@ def verify_telegram_init_data(init_data: str) -> dict | None:
 
         check_string = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
 
-        # HMAC-SHA256(key=HMAC-SHA256("WebAppData", bot_token), msg=check_string)
         secret_key    = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
         expected_hash = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
 
@@ -63,16 +61,28 @@ def get_user_from_request() -> dict | None:
     return verify_telegram_init_data(init_data)
 
 
+def is_session_admin() -> bool:
+    """Check if the current Flask session belongs to an authenticated admin."""
+    return bool(session.get("is_admin"))
+
+
 def admin_required(f):
-    """Decorator: blocks non-admin requests with 403."""
+    """Decorator: allows access via valid Telegram initData OR authenticated browser session."""
     @wraps(f)
     def decorated(*args, **kwargs):
+        # 1) Flask session (browser password login)
+        if is_session_admin():
+            return f(*args, **kwargs)
+
+        # 2) Telegram WebApp initData
         user = get_user_from_request()
-        if not user or int(user.get("id", 0)) != ADMIN_ID:
-            logger.warning(f"Admin access denied — user: {user}")
-            return jsonify({
-                "error": "Access Denied",
-                "message": "You are not authorised to access this endpoint."
-            }), 403
-        return f(*args, **kwargs)
+        if user and int(user.get("id", 0)) == ADMIN_ID:
+            return f(*args, **kwargs)
+
+        logger.warning(f"Admin access denied — user: {user}, session: {dict(session)}")
+        return jsonify({
+            "error": "Access Denied",
+            "message": "You are not authorised. Please log in.",
+            "code": "AUTH_REQUIRED"
+        }), 403
     return decorated

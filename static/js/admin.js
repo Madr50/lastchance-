@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════
-   𝕏 Admin Panel — Premium JS v2
+   𝕏 Admin Panel — v3 Pro
    ═══════════════════════════════════════════════════ */
 'use strict';
 
@@ -8,39 +8,140 @@ const ADMIN = 8989271393;
 const toast = document.getElementById('toast');
 let toastT  = null;
 let accountsData = [];
+let currentFilter = 'all';
 
 if (tg) { tg.ready(); tg.expand(); }
 
-// ── Auth ──────────────────────────────────────────────
-(function auth() {
-  if (!tg) { reveal(); return; }          // dev / browser mode — bypass
-  const user = tg.initDataUnsafe?.user;
-  if (!user || Number(user.id) !== ADMIN) {
-    document.getElementById('accessDenied').classList.remove('hidden');
+// ── Auth Flow ─────────────────────────────────────────
+(async function initAuth() {
+  // 1) Telegram WebApp with real initData (actually inside Telegram)
+  if (tg && tg.initData) {
+    const user = tg.initDataUnsafe?.user;
+    if (!user || Number(user.id) !== ADMIN) {
+      document.getElementById('accessDenied').classList.remove('hidden');
+      return;
+    }
+    reveal();
     return;
   }
-  reveal();
+
+  // 2) Browser — check existing session first
+  try {
+    const res = await fetch('/api/admin/check');
+    if (res.ok) {
+      reveal();
+      return;
+    }
+  } catch (_) {}
+
+  // 3) Show login screen
+  showLogin();
 })();
 
+function showLogin() {
+  document.getElementById('loginScreen').classList.remove('hidden');
+  setTimeout(() => document.getElementById('loginPass').focus(), 100);
+}
+
 function reveal() {
+  document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('adminApp').classList.remove('hidden');
   loadStats();
   loadAccounts();
   loadOrders();
 }
 
+// Login form
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn     = document.getElementById('loginBtn');
+  const btnText = document.getElementById('loginBtnText');
+  const btnLoad = document.getElementById('loginBtnLoad');
+  const err     = document.getElementById('loginErr');
+  const pass    = document.getElementById('loginPass').value;
+
+  btn.disabled  = true;
+  btnText.classList.add('hidden');
+  btnLoad.classList.remove('hidden');
+  err.classList.add('hidden');
+
+  try {
+    const res  = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pass })
+    });
+    if (res.ok) {
+      reveal();
+    } else {
+      err.classList.remove('hidden');
+      document.getElementById('loginPass').value = '';
+      document.getElementById('loginPass').focus();
+    }
+  } catch (_) {
+    err.textContent = '❌ خطأ في الاتصال بالخادم';
+    err.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btnText.classList.remove('hidden');
+    btnLoad.classList.add('hidden');
+  }
+});
+
+// Toggle password visibility
+document.getElementById('togglePass').addEventListener('click', function() {
+  const inp = document.getElementById('loginPass');
+  const open = document.getElementById('eyeOpen');
+  const closed = document.getElementById('eyeClosed');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    open.classList.add('hidden');
+    closed.classList.remove('hidden');
+  } else {
+    inp.type = 'password';
+    open.classList.remove('hidden');
+    closed.classList.add('hidden');
+  }
+});
+
+// Logout
+async function logout() {
+  try { await fetch('/api/admin/logout', { method: 'POST' }); } catch (_) {}
+  location.reload();
+}
+document.getElementById('logoutBtn').addEventListener('click', logout);
+document.getElementById('logoutBtnMobile').addEventListener('click', logout);
+
+// ── Mobile Sidebar ────────────────────────────────────
+const sidebar        = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebarOverlay');
+const menuBtn        = document.getElementById('menuBtn');
+
+menuBtn.addEventListener('click', () => {
+  sidebar.classList.toggle('open');
+  sidebarOverlay.classList.toggle('hidden');
+});
+sidebarOverlay.addEventListener('click', closeSidebar);
+function closeSidebar() {
+  sidebar.classList.remove('open');
+  sidebarOverlay.classList.add('hidden');
+}
+
 // ── Tab Navigation ────────────────────────────────────
 document.querySelectorAll('.nav-link').forEach(link => {
-  link.addEventListener('click', () => switchTab(link.dataset.tab));
+  link.addEventListener('click', () => {
+    switchTab(link.dataset.tab);
+    closeSidebar();
+  });
 });
 
 function switchTab(name) {
-  document.querySelectorAll('.nav-link').forEach(l => {
-    l.classList.toggle('active', l.dataset.tab === name);
-  });
-  document.querySelectorAll('.tab').forEach(t => {
-    t.classList.toggle('active', t.id === `tab-${name}`);
-  });
+  document.querySelectorAll('.nav-link').forEach(l =>
+    l.classList.toggle('active', l.dataset.tab === name)
+  );
+  document.querySelectorAll('.tab').forEach(t =>
+    t.classList.toggle('active', t.id === `tab-${name}`)
+  );
 }
 
 // ── API helper ────────────────────────────────────────
@@ -48,41 +149,97 @@ function initData() { return tg?.initData || ''; }
 
 async function api(url, opts = {}) {
   if (!opts.headers) opts.headers = {};
-  opts.headers['X-Init-Data'] = initData();
+  const iData = initData();
+  if (iData) opts.headers['X-Init-Data'] = iData;
   const res  = await fetch(url, opts);
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || json.message || `HTTP ${res.status}`);
+  if (!res.ok) {
+    if (res.status === 403) {
+      showLogin();
+      document.getElementById('adminApp').classList.add('hidden');
+      throw new Error('يرجى تسجيل الدخول مجدداً');
+    }
+    throw new Error(json.error || json.message || `HTTP ${res.status}`);
+  }
   return json;
+}
+
+// ── Refresh all ────────────────────────────────────────
+function refreshAll() {
+  loadStats();
+  loadAccounts();
+  loadOrders();
+  showToast('🔄 تم التحديث', 2000);
 }
 
 // ── Stats ─────────────────────────────────────────────
 async function loadStats() {
   try {
     const s = await api('/api/admin/stats');
-    setText('statTotal',    s.total);
-    setText('statAvail',    s.available);
-    setText('statSold',     s.sold);
-    setText('statReserved', s.reserved);
-    setText('statRev',      '$' + Number(s.revenue).toFixed(2));
-    setText('statOrders',   s.total_orders);
+    animateNumber('statTotal',    s.total);
+    animateNumber('statAvail',    s.available);
+    animateNumber('statSold',     s.sold);
+    animateNumber('statReserved', s.reserved);
+    setText('statRev', '$' + Number(s.revenue).toFixed(2));
+    animateNumber('statOrders',   s.total_orders);
 
     const ba = document.getElementById('navBadgeAccounts');
     const bo = document.getElementById('navBadgeOrders');
-    if (ba && s.available > 0) { ba.textContent = s.available; ba.classList.add('show'); }
-    if (bo && s.total_orders > 0) { bo.textContent = s.total_orders; bo.classList.add('show'); }
-  } catch (e) { showToast('⚠️ تعذّر تحميل الإحصائيات'); }
+    if (ba) {
+      if (s.available > 0) { ba.textContent = s.available; ba.classList.add('show'); }
+      else ba.classList.remove('show');
+    }
+    if (bo) {
+      if (s.total_orders > 0) { bo.textContent = s.total_orders; bo.classList.add('show'); }
+      else bo.classList.remove('show');
+    }
+  } catch (e) {
+    if (!e.message.includes('تسجيل')) showToast('⚠️ تعذّر تحميل الإحصائيات');
+  }
 }
+
 function setText(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
+}
+
+function animateNumber(id, target) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const start   = parseInt(el.textContent) || 0;
+  const end     = Number(target) || 0;
+  const dur     = 600;
+  const startTs = performance.now();
+  function step(ts) {
+    const progress = Math.min((ts - startTs) / dur, 1);
+    const ease     = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(start + (end - start) * ease);
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
 
 // ── Accounts ──────────────────────────────────────────
 async function loadAccounts() {
   try {
     accountsData = await api('/api/admin/accounts');
-    renderAccounts(accountsData);
-  } catch (e) { showToast('⚠️ تعذّر تحميل الحسابات'); }
+    renderAccounts(getFilteredAccounts());
+  } catch (e) {
+    if (!e.message.includes('تسجيل')) showToast('⚠️ تعذّر تحميل الحسابات');
+  }
+}
+
+function getFilteredAccounts() {
+  const q = (document.getElementById('accountSearch')?.value || '').trim().toLowerCase();
+  return accountsData.filter(a => {
+    const matchFilter = currentFilter === 'all' || a.status === currentFilter;
+    const matchSearch = !q ||
+      a.name.toLowerCase().includes(q) ||
+      String(a.creation_year || '').includes(q) ||
+      (a.status || '').includes(q) ||
+      (a.category || '').toLowerCase().includes(q);
+    return matchFilter && matchSearch;
+  });
 }
 
 function renderAccounts(list) {
@@ -96,94 +253,163 @@ function renderAccounts(list) {
   empty.classList.add('hidden');
   tbody.innerHTML = list.map(a => `
     <tr data-id="${a.id}">
-      <td style="color:var(--text-3);font-size:.8rem">#${a.id}</td>
-      <td style="font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}</td>
-      <td style="color:var(--text-2)">${a.creation_year || '—'}</td>
-      <td style="font-weight:700;color:var(--blue)">$${Number(a.price).toFixed(2)}</td>
+      <td class="td-id">#${a.id}</td>
+      <td>
+        <div class="account-cell">
+          ${a.image ? `<img src="${esc(a.image)}" class="account-thumb" alt=""/>` : '<div class="account-thumb-placeholder">𝕏</div>'}
+          <div class="account-info">
+            <div class="account-name">${esc(a.name)}</div>
+            ${a.description ? `<div class="account-desc">${esc(a.description.substring(0,50))}${a.description.length>50?'…':''}</div>` : ''}
+          </div>
+        </div>
+      </td>
+      <td class="td-year">${a.creation_year ? `<span class="year-badge">${a.creation_year}</span>` : '—'}</td>
+      <td class="td-price">$${Number(a.price).toFixed(2)}</td>
       <td><span class="spill sp-${a.status}">${statusLabel(a.status)}</span></td>
-      <td style="color:var(--text-3);font-size:.8rem">${esc(a.category || 'twitter')}</td>
+      <td class="td-cat"><span class="cat-badge">${catIcon(a.category)} ${esc(a.category || 'twitter')}</span></td>
       <td>
         <div class="action-row">
-          <button class="act-btn act-edit" onclick="openEdit(${a.id})">✏️ تعديل</button>
-          <button class="act-btn act-sold" onclick="markSold(${a.id})">✅ بيع</button>
-          <button class="act-btn act-del"  onclick="delAccount(${a.id})">🗑️</button>
+          <button class="act-btn act-edit" onclick="openEdit(${a.id})" title="تعديل">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            تعديل
+          </button>
+          <button class="act-btn act-sold" onclick="markSold(${a.id})" title="تعيين مباع">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            بيع
+          </button>
+          <button class="act-btn act-del" onclick="confirmDelete(${a.id})" title="حذف">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
         </div>
       </td>
     </tr>`).join('');
 }
 
+function catIcon(c) {
+  return { twitter:'🐦', aged:'🕰️', verified:'✅', other:'📌' }[c] || '📌';
+}
 function statusLabel(s) {
-  return { available: 'متاح', sold: 'مباع', reserved: 'محجوز' }[s] || s;
+  return { available:'متاح', sold:'مباع', reserved:'محجوز' }[s] || s;
 }
 
-document.getElementById('accountSearch').addEventListener('input', function () {
-  const q = this.value.trim().toLowerCase();
-  renderAccounts(accountsData.filter(a =>
-    a.name.toLowerCase().includes(q) ||
-    String(a.creation_year || '').includes(q) ||
-    (a.status || '').includes(q) ||
-    (a.category || '').toLowerCase().includes(q)
-  ));
+// Search + Filter chips
+document.getElementById('accountSearch').addEventListener('input', () => renderAccounts(getFilteredAccounts()));
+
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    currentFilter = chip.dataset.filter;
+    renderAccounts(getFilteredAccounts());
+  });
 });
 
 async function markSold(id) {
-  if (!confirm('تعيين هذا الحساب كمباع؟')) return;
-  try {
-    const fd = new FormData();
-    fd.append('status', 'sold');
-    fd.append('initData', initData());
-    await api(`/api/admin/accounts/${id}`, { method: 'PUT', body: fd });
-    showToast('✅ تم تعيينه مباعاً');
-    await Promise.all([loadAccounts(), loadStats()]);
-  } catch (e) { showToast('❌ ' + e.message); }
+  confirmAction({
+    title: 'تعيين مباعاً؟',
+    msg: 'سيتم تغيير حالة الحساب إلى "مباع" — هذا الإجراء قابل للتعديل.',
+    icon: '✅',
+    okText: 'نعم، بيع',
+    onOk: async () => {
+      try {
+        const fd = new FormData();
+        fd.append('status', 'sold');
+        await api(`/api/admin/accounts/${id}`, { method: 'PUT', body: fd });
+        showToast('✅ تم تعيينه مباعاً بنجاح');
+        await Promise.all([loadAccounts(), loadStats()]);
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+  });
 }
 
-async function delAccount(id) {
-  if (!confirm('حذف هذا الحساب نهائياً؟')) return;
-  try {
-    await api(`/api/admin/accounts/${id}`, { method: 'DELETE' });
-    showToast('🗑️ تم الحذف');
-    await Promise.all([loadAccounts(), loadStats()]);
-  } catch (e) { showToast('❌ ' + e.message); }
+function confirmDelete(id) {
+  confirmAction({
+    title: 'حذف الحساب؟',
+    msg: 'سيتم حذف الحساب نهائياً ولا يمكن التراجع عن هذا الإجراء.',
+    icon: '🗑️',
+    okText: 'حذف نهائي',
+    danger: true,
+    onOk: async () => {
+      try {
+        await api(`/api/admin/accounts/${id}`, { method: 'DELETE' });
+        showToast('🗑️ تم الحذف بنجاح');
+        await Promise.all([loadAccounts(), loadStats()]);
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+  });
 }
+
+// ── Confirm Dialog ────────────────────────────────────
+let _confirmOkCallback = null;
+function confirmAction({ title, msg, icon, okText, danger, onOk }) {
+  document.getElementById('confirmIcon').textContent  = icon  || '❓';
+  document.getElementById('confirmTitle').textContent = title || 'تأكيد';
+  document.getElementById('confirmMsg').textContent   = msg   || '';
+  const okBtn = document.getElementById('confirmOk');
+  okBtn.textContent = okText || 'تأكيد';
+  okBtn.className   = 'btn ' + (danger ? 'btn-danger' : 'btn-primary');
+  _confirmOkCallback = onOk;
+  document.getElementById('confirmModal').classList.remove('hidden');
+}
+document.getElementById('confirmOk').addEventListener('click', async () => {
+  document.getElementById('confirmModal').classList.add('hidden');
+  if (_confirmOkCallback) { await _confirmOkCallback(); _confirmOkCallback = null; }
+});
+document.getElementById('confirmCancel').addEventListener('click', () => {
+  document.getElementById('confirmModal').classList.add('hidden');
+  _confirmOkCallback = null;
+});
+document.getElementById('confirmModal').addEventListener('click', e => {
+  if (e.target.id === 'confirmModal') {
+    document.getElementById('confirmModal').classList.add('hidden');
+    _confirmOkCallback = null;
+  }
+});
 
 // ── Edit Modal ────────────────────────────────────────
 function openEdit(id) {
   const a = accountsData.find(x => x.id === id);
   if (!a) return;
-  setVal('editId',     a.id);
-  setVal('editName',   a.name);
-  setVal('editPrice',  a.price);
-  setVal('editYear',   a.creation_year || '');
-  setVal('editStatus', a.status);
-  setVal('editDesc',   a.description || '');
+  setVal('editId',       a.id);
+  setVal('editName',     a.name);
+  setVal('editPrice',    a.price);
+  setVal('editYear',     a.creation_year || '');
+  setVal('editStatus',   a.status);
+  setVal('editCategory', a.category || 'twitter');
+  setVal('editDesc',     a.description || '');
   document.getElementById('editModal').classList.remove('hidden');
+  document.getElementById('editName').focus();
 }
+
 function setVal(id, v) {
   const el = document.getElementById(id);
   if (el) el.value = v;
 }
 
-function closeEdit() {
-  document.getElementById('editModal').classList.add('hidden');
-}
-document.getElementById('editClose').addEventListener('click', closeEdit);
+function closeEdit() { document.getElementById('editModal').classList.add('hidden'); }
+
+document.getElementById('editClose').addEventListener('click',  closeEdit);
 document.getElementById('editCancel').addEventListener('click', closeEdit);
 document.getElementById('editModal').addEventListener('click', e => {
   if (e.target.id === 'editModal') closeEdit();
 });
 
-document.getElementById('editForm').addEventListener('submit', async function (e) {
+document.getElementById('editForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   const id  = document.getElementById('editId').value;
-  const fd  = new FormData(this);
-  fd.append('initData', initData());
+  const btn = this.querySelector('[type=submit]');
+  btn.disabled = true;
+  const fd = new FormData(this);
   try {
     await api(`/api/admin/accounts/${id}`, { method: 'PUT', body: fd });
     showToast('💾 تم الحفظ بنجاح');
     closeEdit();
     await Promise.all([loadAccounts(), loadStats()]);
-  } catch (err) { showToast('❌ ' + err.message); }
+  } catch (err) {
+    showToast('❌ ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // ── Add Form ──────────────────────────────────────────
@@ -195,10 +421,8 @@ const previewImg   = document.getElementById('previewImg');
 const removePreview= document.getElementById('removePreview');
 const addResult    = document.getElementById('addResult');
 
-// Click to upload
 dropContent.addEventListener('click', () => imageInput.click());
 
-// Drag & drop
 dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
 dropZone.addEventListener('drop', e => {
@@ -237,14 +461,13 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   addResult.classList.add('hidden');
 });
 
-document.getElementById('addForm').addEventListener('submit', async function (e) {
+document.getElementById('addForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   const btn = document.getElementById('addSubmitBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span style="opacity:.6">⏳ جاري الإضافة…</span>';
+  btn.innerHTML = '<svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> جاري الإضافة…';
 
   const fd = new FormData(this);
-  fd.append('initData', initData());
   try {
     const data = await api('/api/admin/accounts', { method: 'POST', body: fd });
     addResult.textContent = `✅ تمت إضافة الحساب #${data.id} بنجاح!`;
@@ -255,6 +478,7 @@ document.getElementById('addForm').addEventListener('submit', async function (e)
     dropContent.classList.remove('hidden');
     showToast('✅ تمت الإضافة بنجاح!');
     await Promise.all([loadAccounts(), loadStats()]);
+    setTimeout(() => switchTab('accounts'), 1500);
   } catch (err) {
     addResult.textContent = '❌ ' + err.message;
     addResult.className   = 'form-feedback feedback-err';
@@ -271,7 +495,9 @@ async function loadOrders() {
   try {
     const orders = await api('/api/admin/orders');
     renderOrders(orders);
-  } catch (e) { showToast('⚠️ تعذّر تحميل الطلبات'); }
+  } catch (e) {
+    if (!e.message.includes('تسجيل')) showToast('⚠️ تعذّر تحميل الطلبات');
+  }
 }
 
 function renderOrders(orders) {
@@ -285,18 +511,25 @@ function renderOrders(orders) {
   empty.classList.add('hidden');
 
   const statuses = ['pending', 'paid', 'completed', 'cancelled'];
-  const stLabel  = { pending: 'قيد الانتظار', paid: 'مدفوع', completed: 'مكتمل', cancelled: 'ملغي' };
+  const stLabel  = { pending:'قيد الانتظار', paid:'مدفوع', completed:'مكتمل', cancelled:'ملغي' };
 
   tbody.innerHTML = orders.map(o => `
     <tr>
-      <td style="color:var(--text-3);font-size:.8rem">#${o.id}</td>
-      <td style="font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.account_name || '—')}</td>
+      <td class="td-id">#${o.id}</td>
       <td>
-        <div style="font-weight:600">@${esc(o.buyer_username || 'unknown')}</div>
-        <div style="font-size:.72rem;color:var(--text-3)">${o.buyer_id}</div>
+        <div class="order-account">
+          <span class="order-name">${esc(o.account_name || '—')}</span>
+        </div>
       </td>
+      <td>
+        <div class="buyer-cell">
+          <div class="buyer-name">@${esc(o.buyer_username || 'unknown')}</div>
+          <div class="buyer-id">${o.buyer_id}</div>
+        </div>
+      </td>
+      <td class="td-price">$${Number(o.account_price || 0).toFixed(2)}</td>
       <td><span class="spill sp-${o.status}">${stLabel[o.status] || o.status}</span></td>
-      <td style="color:var(--text-3);font-size:.8rem">${fmtDate(o.created_at)}</td>
+      <td class="td-date">${fmtDate(o.created_at)}</td>
       <td>
         <select class="status-sel" onchange="updateOrder(${o.id}, this.value)">
           ${statuses.map(s =>
@@ -311,7 +544,7 @@ async function updateOrder(id, status) {
   try {
     await api(`/api/admin/orders/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Init-Data': initData() },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })
     });
     showToast(`📋 الطلب #${id} → ${status}`);
@@ -342,4 +575,8 @@ function showToast(msg, dur = 3500) {
 }
 
 // ── Auto-refresh every 60 s ───────────────────────────
-setInterval(loadStats, 60_000);
+setInterval(() => {
+  if (!document.getElementById('adminApp').classList.contains('hidden')) {
+    loadStats();
+  }
+}, 60_000);

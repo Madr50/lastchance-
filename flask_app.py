@@ -2,16 +2,18 @@
 import os
 import time
 import logging
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask import Flask, request, jsonify, render_template, send_from_directory, session
+
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-from auth_middleware import admin_required
+from auth_middleware import admin_required, is_session_admin, get_user_from_request
 from database import (
     get_all_accounts, get_all_accounts_admin, get_account,
     add_account, update_account, delete_account,
     get_all_orders, update_order, get_stats
 )
+from config import ADMIN_ID, ADMIN_PASSWORD
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,7 @@ UPLOAD_FOLDER      = "static/images/accounts"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SESSION_SECRET", "change-me-in-prod-123!")
 app.config["UPLOAD_FOLDER"]      = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024   # 16 MB
 CORS(app)
@@ -30,16 +33,14 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-# ── Health check (Render / ALB) ────────────────────────────
-
+# ── Health check ───────────────────────────────────────
 @app.route("/health")
 @app.route("/ping")
 def health():
     return jsonify({"status": "ok"}), 200
 
 
-# ── Page routes ────────────────────────────────────────────
-
+# ── Page routes ────────────────────────────────────────
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -50,8 +51,36 @@ def admin():
     return render_template("admin.html")
 
 
-# ── Public API ─────────────────────────────────────────────
+# ── Browser Auth ───────────────────────────────────────
+@app.route("/api/admin/login", methods=["POST"])
+def api_admin_login():
+    data     = request.get_json(silent=True) or {}
+    password = data.get("password", "").strip()
+    if password == ADMIN_PASSWORD:
+        session["is_admin"] = True
+        session.permanent   = True
+        return jsonify({"success": True})
+    return jsonify({"error": "كلمة المرور غير صحيحة"}), 401
 
+
+@app.route("/api/admin/logout", methods=["POST"])
+def api_admin_logout():
+    session.clear()
+    return jsonify({"success": True})
+
+
+@app.route("/api/admin/check", methods=["GET"])
+def api_admin_check():
+    """Returns 200 if already authed (session or Telegram), 403 otherwise."""
+    if is_session_admin():
+        return jsonify({"authed": True, "via": "session"})
+    user = get_user_from_request()
+    if user and int(user.get("id", 0)) == ADMIN_ID:
+        return jsonify({"authed": True, "via": "telegram"})
+    return jsonify({"authed": False}), 403
+
+
+# ── Public API ─────────────────────────────────────────
 @app.route("/api/accounts", methods=["GET"])
 def api_get_accounts():
     accounts = get_all_accounts(status="available")
@@ -66,15 +95,13 @@ def api_get_account(account_id):
     return jsonify(_format_account_public(a))
 
 
-# ── Public buy ─────────────────────────────────────────────
-
+# ── Public buy ─────────────────────────────────────────
 @app.route("/api/buy", methods=["POST"])
 def api_buy():
     from database import create_order
     import json as _json
     from urllib.parse import unquote
 
-    # Accept JSON or form data
     body       = request.get_json(silent=True) or {}
     acc_id_raw = request.form.get("account_id") or body.get("account_id")
     if not acc_id_raw:
@@ -91,7 +118,6 @@ def api_buy():
     if account["status"] != "available":
         return jsonify({"error": "Account is no longer available"}), 409
 
-    # Parse buyer from Telegram initData (best-effort)
     buyer_id, buyer_username = 0, "unknown"
     init_data_raw = request.form.get("initData") or request.headers.get("X-Init-Data", "")
     if init_data_raw:
@@ -105,8 +131,6 @@ def api_buy():
 
     order_id = create_order(acc_id, buyer_id, buyer_username)
     update_account(acc_id, status="reserved")
-
-    # Notify admin (non-blocking)
     _notify_admin_async(order_id, account, buyer_id, buyer_username)
 
     return jsonify({
@@ -117,8 +141,7 @@ def api_buy():
     })
 
 
-# ── Admin API ──────────────────────────────────────────────
-
+# ── Admin API ──────────────────────────────────────────
 @app.route("/api/admin/accounts", methods=["GET"])
 @admin_required
 def api_admin_get_accounts():
@@ -130,12 +153,12 @@ def api_admin_get_accounts():
 def api_admin_create_account():
     name = request.form.get("name", "").strip()
     if not name:
-        return jsonify({"error": "Name is required"}), 400
+        return jsonify({"error": "الاسم مطلوب"}), 400
 
     try:
         price = float(request.form.get("price", 0))
     except (ValueError, TypeError):
-        return jsonify({"error": "Invalid price"}), 400
+        return jsonify({"error": "السعر غير صحيح"}), 400
 
     description   = request.form.get("description", "")
     raw_year      = request.form.get("creation_year")
@@ -161,7 +184,7 @@ def api_admin_update_account(account_id):
         try:
             updates["price"] = float(request.form["price"])
         except (ValueError, TypeError):
-            return jsonify({"error": "Invalid price"}), 400
+            return jsonify({"error": "السعر غير صحيح"}), 400
     raw_year = request.form.get("creation_year", "")
     if raw_year and raw_year.isdigit():
         updates["creation_year"] = int(raw_year)
@@ -202,7 +225,7 @@ def api_admin_update_order(order_id):
     status  = data.get("status")
     allowed = {"pending", "paid", "completed", "cancelled"}
     if status not in allowed:
-        return jsonify({"error": f"Invalid status. Allowed: {sorted(allowed)}"}), 400
+        return jsonify({"error": f"الحالات المتاحة: {sorted(allowed)}"}), 400
     update_order(order_id, status)
     return jsonify({"success": True})
 
@@ -212,12 +235,11 @@ def api_admin_update_order(order_id):
 def api_admin_upload():
     img = _save_upload(request.files.get("image"))
     if not img:
-        return jsonify({"error": "No valid image uploaded"}), 400
+        return jsonify({"error": "لا توجد صورة صالحة"}), 400
     return jsonify({"success": True, "path": img, "url": _image_url(img)})
 
 
-# ── Helpers ────────────────────────────────────────────────
-
+# ── Helpers ────────────────────────────────────────────
 def _image_url(path: str | None) -> str:
     if not path:
         return ""
@@ -255,7 +277,6 @@ def _save_upload(file_storage) -> str | None:
 
 
 def _notify_admin_async(order_id, account, buyer_id, buyer_username) -> None:
-    """Send admin notification in a daemon thread — never blocks the response."""
     import threading, asyncio
     from config import BOT_TOKEN, ADMIN_ID
 

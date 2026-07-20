@@ -8,4 +8,7 @@ SHOP_NAME      = os.environ.get("SHOP_NAME", "Twitter X Shop")
 DB_NAME        = os.environ.get("DB_NAME", "shop.db")
 ACCOUNTS_DIR   = "static/images/accounts"
 
+# Admin panel password (browser login). Set ADMIN_PASSWORD env var to secure it.
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin1234")
+
 os.makedirs(ACCOUNTS_DIR, exist_ok=True)

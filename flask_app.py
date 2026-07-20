@@ -1,5 +1,6 @@
 # flask_app.py
 import os
+import time
 import logging
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
@@ -14,23 +15,30 @@ from database import (
 
 logger = logging.getLogger(__name__)
 
-UPLOAD_FOLDER = "static/images/accounts"
+UPLOAD_FOLDER      = "static/images/accounts"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 
 app = Flask(__name__)
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
+app.config["UPLOAD_FOLDER"]      = UPLOAD_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024   # 16 MB
 CORS(app)
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-def allowed_file(filename):
-    return "." in filename and \
-           filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+def allowed_file(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-# ── Page routes ──────────────────────────────────────────
+# ── Health check (Render / ALB) ────────────────────────────
+
+@app.route("/health")
+@app.route("/ping")
+def health():
+    return jsonify({"status": "ok"}), 200
+
+
+# ── Page routes ────────────────────────────────────────────
 
 @app.route("/")
 def index():
@@ -42,25 +50,12 @@ def admin():
     return render_template("admin.html")
 
 
-# ── Public API ───────────────────────────────────────────
+# ── Public API ─────────────────────────────────────────────
 
 @app.route("/api/accounts", methods=["GET"])
 def api_get_accounts():
     accounts = get_all_accounts(status="available")
-    result = []
-    for a in accounts:
-        result.append({
-            "id": a["id"],
-            "name": a["name"],
-            "description": a["description"],
-            "price": a["price"],
-            "creation_year": a["creation_year"],
-            "category": a["category"],
-            "image": _image_url(a["image_path"]),
-            "status": a["status"],
-            "created_at": a["created_at"],
-        })
-    return jsonify(result)
+    return jsonify([_format_account_public(a) for a in accounts])
 
 
 @app.route("/api/accounts/<int:account_id>", methods=["GET"])
@@ -68,28 +63,20 @@ def api_get_account(account_id):
     a = get_account(account_id)
     if not a:
         return jsonify({"error": "Not found"}), 404
-    return jsonify({
-        "id": a["id"],
-        "name": a["name"],
-        "description": a["description"],
-        "price": a["price"],
-        "creation_year": a["creation_year"],
-        "category": a["category"],
-        "image": _image_url(a["image_path"]),
-        "status": a["status"],
-        "created_at": a["created_at"],
-    })
+    return jsonify(_format_account_public(a))
 
 
-# ── Public Buy ────────────────────────────────────────
+# ── Public buy ─────────────────────────────────────────────
 
 @app.route("/api/buy", methods=["POST"])
 def api_buy():
-    """Public endpoint — any Telegram user can place an order."""
-    from database import create_order, update_account, get_account
-    import os
+    from database import create_order
+    import json as _json
+    from urllib.parse import unquote
 
-    acc_id_raw = request.form.get("account_id") or (request.get_json(silent=True) or {}).get("account_id")
+    # Accept JSON or form data
+    body       = request.get_json(silent=True) or {}
+    acc_id_raw = request.form.get("account_id") or body.get("account_id")
     if not acc_id_raw:
         return jsonify({"error": "account_id is required"}), 400
 
@@ -104,17 +91,14 @@ def api_buy():
     if account["status"] != "available":
         return jsonify({"error": "Account is no longer available"}), 409
 
-    # Extract buyer info from initData if present (best-effort)
-    buyer_id       = 0
-    buyer_username = "unknown"
-    init_data_raw  = request.form.get("initData") or request.headers.get("X-Init-Data", "")
+    # Parse buyer from Telegram initData (best-effort)
+    buyer_id, buyer_username = 0, "unknown"
+    init_data_raw = request.form.get("initData") or request.headers.get("X-Init-Data", "")
     if init_data_raw:
         try:
-            from urllib.parse import unquote
-            import json as _json
-            params = dict(p.split("=", 1) for p in init_data_raw.split("&") if "=" in p)
-            user   = _json.loads(unquote(params.get("user", "{}")))
-            buyer_id       = user.get("id", 0)
+            params        = dict(p.split("=", 1) for p in init_data_raw.split("&") if "=" in p)
+            user          = _json.loads(unquote(params.get("user", "{}")))
+            buyer_id      = user.get("id", 0)
             buyer_username = user.get("username", "unknown")
         except Exception:
             pass
@@ -122,25 +106,8 @@ def api_buy():
     order_id = create_order(acc_id, buyer_id, buyer_username)
     update_account(acc_id, status="reserved")
 
-    # Notify admin via bot (best-effort, non-blocking)
-    try:
-        import asyncio, threading
-        from config import BOT_TOKEN, ADMIN_ID
-        if BOT_TOKEN:
-            from telegram import Bot
-            msg = (
-                f"🆕 *New Order #{order_id}*\n\n"
-                f"📦 {account['name']}\n"
-                f"💰 ${account['price']:.2f}\n"
-                f"👤 @{buyer_username} (ID: `{buyer_id}`)"
-            )
-            def _notify():
-                asyncio.run(Bot(BOT_TOKEN).send_message(
-                    chat_id=ADMIN_ID, text=msg, parse_mode="Markdown"
-                ))
-            threading.Thread(target=_notify, daemon=True).start()
-    except Exception as exc:
-        logger.warning(f"Admin notification failed: {exc}")
+    # Notify admin (non-blocking)
+    _notify_admin_async(order_id, account, buyer_id, buyer_username)
 
     return jsonify({
         "success":      True,
@@ -150,13 +117,12 @@ def api_buy():
     })
 
 
-# ── Admin API ─────────────────────────────────────────────
+# ── Admin API ──────────────────────────────────────────────
 
 @app.route("/api/admin/accounts", methods=["GET"])
 @admin_required
 def api_admin_get_accounts():
-    accounts = get_all_accounts_admin()
-    return jsonify([_format_account(a) for a in accounts])
+    return jsonify([_format_account(a) for a in get_all_accounts_admin()])
 
 
 @app.route("/api/admin/accounts", methods=["POST"])
@@ -165,16 +131,19 @@ def api_admin_create_account():
     name = request.form.get("name", "").strip()
     if not name:
         return jsonify({"error": "Name is required"}), 400
-    price = float(request.form.get("price", 0))
-    description = request.form.get("description", "")
-    creation_year = request.form.get("creation_year")
-    creation_year = int(creation_year) if creation_year else None
-    category = request.form.get("category", "twitter")
 
-    image_path = _save_upload(request.files.get("image"))
+    try:
+        price = float(request.form.get("price", 0))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid price"}), 400
 
-    account_id = add_account(name, description, price, creation_year,
-                             category, image_path)
+    description   = request.form.get("description", "")
+    raw_year      = request.form.get("creation_year")
+    creation_year = int(raw_year) if raw_year and raw_year.isdigit() else None
+    category      = request.form.get("category", "twitter")
+    image_path    = _save_upload(request.files.get("image"))
+
+    account_id = add_account(name, description, price, creation_year, category, image_path)
     return jsonify({"success": True, "id": account_id}), 201
 
 
@@ -189,9 +158,13 @@ def api_admin_update_account(account_id):
         if field in request.form:
             updates[field] = request.form[field]
     if "price" in request.form:
-        updates["price"] = float(request.form["price"])
-    if "creation_year" in request.form and request.form["creation_year"]:
-        updates["creation_year"] = int(request.form["creation_year"])
+        try:
+            updates["price"] = float(request.form["price"])
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid price"}), 400
+    raw_year = request.form.get("creation_year", "")
+    if raw_year and raw_year.isdigit():
+        updates["creation_year"] = int(raw_year)
 
     img = _save_upload(request.files.get("image"))
     if img:
@@ -225,11 +198,11 @@ def api_admin_orders():
 @app.route("/api/admin/orders/<int:order_id>", methods=["PUT"])
 @admin_required
 def api_admin_update_order(order_id):
-    data = request.get_json(silent=True) or {}
-    status = data.get("status")
+    data    = request.get_json(silent=True) or {}
+    status  = data.get("status")
     allowed = {"pending", "paid", "completed", "cancelled"}
     if status not in allowed:
-        return jsonify({"error": f"Invalid status. Allowed: {allowed}"}), 400
+        return jsonify({"error": f"Invalid status. Allowed: {sorted(allowed)}"}), 400
     update_order(order_id, status)
     return jsonify({"success": True})
 
@@ -243,39 +216,65 @@ def api_admin_upload():
     return jsonify({"success": True, "path": img, "url": _image_url(img)})
 
 
-# ── Helpers ───────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────
 
-def _image_url(path):
+def _image_url(path: str | None) -> str:
     if not path:
         return ""
-    filename = os.path.basename(path)
-    return f"/static/images/accounts/{filename}"
+    return f"/static/images/accounts/{os.path.basename(path)}"
 
 
-def _format_account(a):
+def _format_account_public(a: dict) -> dict:
     return {
-        "id": a["id"],
-        "name": a["name"],
-        "description": a["description"],
-        "price": a["price"],
+        "id":            a["id"],
+        "name":          a["name"],
+        "description":   a["description"],
+        "price":         a["price"],
         "creation_year": a["creation_year"],
-        "category": a["category"],
-        "image": _image_url(a["image_path"]),
-        "status": a["status"],
-        "created_at": a["created_at"],
-        "updated_at": a["updated_at"],
+        "category":      a["category"],
+        "image":         _image_url(a["image_path"]),
+        "status":        a["status"],
+        "created_at":    a["created_at"],
     }
 
 
-def _save_upload(file_storage):
+def _format_account(a: dict) -> dict:
+    return {**_format_account_public(a), "updated_at": a["updated_at"]}
+
+
+def _save_upload(file_storage) -> str | None:
     if not file_storage or file_storage.filename == "":
         return None
     if not allowed_file(file_storage.filename):
         return None
     filename = secure_filename(file_storage.filename)
-    # Prepend timestamp to avoid collisions
-    import time
     filename = f"{int(time.time())}_{filename}"
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     file_storage.save(filepath)
     return filepath
+
+
+def _notify_admin_async(order_id, account, buyer_id, buyer_username) -> None:
+    """Send admin notification in a daemon thread — never blocks the response."""
+    import threading, asyncio
+    from config import BOT_TOKEN, ADMIN_ID
+
+    if not BOT_TOKEN:
+        return
+
+    def _run():
+        try:
+            from telegram import Bot
+            msg = (
+                f"🆕 <b>طلب جديد #{order_id}</b>\n\n"
+                f"📦 {account['name']}\n"
+                f"💰 ${account['price']:.2f}\n"
+                f"👤 @{buyer_username} (ID: <code>{buyer_id}</code>)"
+            )
+            asyncio.run(Bot(BOT_TOKEN).send_message(
+                chat_id=ADMIN_ID, text=msg, parse_mode="HTML"
+            ))
+        except Exception as exc:
+            logger.warning(f"Admin notification failed: {exc}")
+
+    threading.Thread(target=_run, daemon=True).start()

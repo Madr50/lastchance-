@@ -1,296 +1,329 @@
-/* ═══════════════════════════════════════════════════
-   𝕏 Admin Panel — Premium JS
-   ═══════════════════════════════════════════════════ */
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>𝕏 لوحة التحكم</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/css/admin.css"/>
+</head>
+<body>
 
-const tg     = window.Telegram?.WebApp;
-const ADMIN  = 8989271393;
-const toast  = document.getElementById('toast');
-let toastT   = null;
-let accountsData = [];
+<!-- ── Access Denied ─────────────────────────────────────── -->
+<div id="accessDenied" class="fullscreen-state hidden">
+  <div class="denied-card">
+    <div class="denied-icon">🚫</div>
+    <h1>وصول مرفوض</h1>
+    <p>هذه اللوحة للمسؤولين فقط.</p>
+  </div>
+</div>
 
-if (tg) { tg.ready(); tg.expand(); }
+<!-- ── Admin App ──────────────────────────────────────────── -->
+<div id="adminApp" class="admin-shell hidden">
 
-// ── Auth ──────────────────────────────────────────────
-(function auth() {
-  if (!tg) { reveal(); return; }                      // dev / browser preview
-  const user = tg.initDataUnsafe?.user;
-  if (!user || Number(user.id) !== ADMIN) {
-    document.getElementById('accessDenied').classList.remove('hidden');
-    return;
-  }
-  reveal();
-})();
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-x">𝕏</div>
+      <div>
+        <span class="sidebar-title">Admin Panel</span>
+        <span class="sidebar-sub">Twitter X Shop</span>
+      </div>
+    </div>
 
-function reveal() {
-  document.getElementById('adminApp').classList.remove('hidden');
-  loadStats();
-  loadAccounts();
-  loadOrders();
-}
+    <nav class="nav-group">
+      <a class="nav-link active" data-tab="dashboard">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        الرئيسية
+      </a>
+      <a class="nav-link" data-tab="accounts">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        الحسابات
+        <span class="nav-badge" id="navBadgeAccounts"></span>
+      </a>
+      <a class="nav-link" data-tab="add">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        إضافة حساب
+      </a>
+      <a class="nav-link" data-tab="orders">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        الطلبات
+        <span class="nav-badge nav-badge-warn" id="navBadgeOrders"></span>
+      </a>
+    </nav>
 
-// ── Nav tabs ──────────────────────────────────────────
-document.querySelectorAll('.nav-link').forEach(link => {
-  link.addEventListener('click', () => {
-    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    link.classList.add('active');
-    document.getElementById(`tab-${link.dataset.tab}`).classList.add('active');
-  });
-});
+    <div class="sidebar-footer">
+      <div class="sidebar-version">v2.0 — Twitter X Shop</div>
+    </div>
+  </aside>
 
-// ── API helper ────────────────────────────────────────
-function initData() { return tg?.initData || ''; }
+  <!-- Main Content -->
+  <main class="content">
 
-async function api(url, opts = {}) {
-  if (!opts.headers) opts.headers = {};
-  opts.headers['X-Init-Data'] = initData();
-  const res  = await fetch(url, opts);
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || json.message || 'Request failed');
-  return json;
-}
+    <!-- ── Dashboard Tab ──────────────────────────────── -->
+    <div class="tab active" id="tab-dashboard">
+      <div class="page-header">
+        <h1 class="page-title">لوحة التحكم</h1>
+        <p class="page-sub">نظرة عامة على المتجر</p>
+      </div>
 
-// ── Stats ─────────────────────────────────────────────
-async function loadStats() {
-  try {
-    const s = await api('/api/admin/stats');
-    setText('statTotal',    s.total);
-    setText('statAvail',    s.available);
-    setText('statSold',     s.sold);
-    setText('statReserved', s.reserved);
-    setText('statRev',      '$' + Number(s.revenue).toFixed(2));
-    setText('statOrders',   s.total_orders);
-
-    // Nav badges
-    const ba = document.getElementById('navBadgeAccounts');
-    const bo = document.getElementById('navBadgeOrders');
-    if (s.available > 0) { ba.textContent = s.available; ba.classList.add('show'); }
-    if (s.total_orders > 0) { bo.textContent = s.total_orders; bo.classList.add('show'); }
-  } catch (e) { showToast('⚠️ Could not load stats'); }
-}
-function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
-
-// ── Accounts ──────────────────────────────────────────
-async function loadAccounts() {
-  try {
-    accountsData = await api('/api/admin/accounts');
-    renderAccounts(accountsData);
-  } catch (e) { showToast('⚠️ Could not load accounts'); }
-}
-
-function renderAccounts(list) {
-  const tbody = document.getElementById('accountsTbody');
-  const empty = document.getElementById('accountsEmpty');
-  if (!list.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); return; }
-  empty.classList.add('hidden');
-  tbody.innerHTML = list.map(a => `
-    <tr data-id="${a.id}">
-      <td style="color:var(--text-3)">#${a.id}</td>
-      <td style="font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis">${esc(a.name)}</td>
-      <td>${a.creation_year || '—'}</td>
-      <td style="font-weight:700;color:var(--blue)">$${Number(a.price).toFixed(2)}</td>
-      <td><span class="spill sp-${a.status}">${a.status}</span></td>
-      <td style="color:var(--text-3)">${esc(a.category)}</td>
-      <td>
-        <div class="action-row">
-          <button class="act-btn act-edit"  onclick="openEdit(${a.id})">✏️ Edit</button>
-          <button class="act-btn act-sold"  onclick="markSold(${a.id})">✅ Sold</button>
-          <button class="act-btn act-del"   onclick="delAccount(${a.id})">🗑️</button>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(29,155,240,.15);color:var(--blue)">📦</div>
+          <div class="stat-body">
+            <div class="stat-val" id="statTotal">—</div>
+            <div class="stat-label">إجمالي الحسابات</div>
+          </div>
         </div>
-      </td>
-    </tr>`).join('');
-}
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(34,197,94,.15);color:var(--green)">✅</div>
+          <div class="stat-body">
+            <div class="stat-val" id="statAvail">—</div>
+            <div class="stat-label">متاح</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(239,68,68,.15);color:var(--red)">🔴</div>
+          <div class="stat-body">
+            <div class="stat-val" id="statSold">—</div>
+            <div class="stat-label">مباع</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(245,158,11,.15);color:var(--gold)">⏳</div>
+          <div class="stat-body">
+            <div class="stat-val" id="statReserved">—</div>
+            <div class="stat-label">محجوز</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(34,197,94,.15);color:var(--green)">💰</div>
+          <div class="stat-body">
+            <div class="stat-val" id="statRev">—</div>
+            <div class="stat-label">الإيرادات</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(139,92,246,.15);color:var(--purple)">📋</div>
+          <div class="stat-body">
+            <div class="stat-val" id="statOrders">—</div>
+            <div class="stat-label">إجمالي الطلبات</div>
+          </div>
+        </div>
+      </div>
 
-document.getElementById('accountSearch').addEventListener('input', function() {
-  const q = this.value.trim().toLowerCase();
-  renderAccounts(accountsData.filter(a =>
-    a.name.toLowerCase().includes(q) ||
-    String(a.creation_year || '').includes(q) ||
-    a.status.includes(q) ||
-    (a.category || '').includes(q)
-  ));
-});
+      <div class="dash-actions">
+        <button class="dash-btn" onclick="switchTab('accounts')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          إدارة الحسابات
+        </button>
+        <button class="dash-btn" onclick="switchTab('add')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          إضافة حساب جديد
+        </button>
+        <button class="dash-btn" onclick="switchTab('orders')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+          عرض الطلبات
+        </button>
+      </div>
+    </div>
 
-async function markSold(id) {
-  if (!confirm('Mark this account as sold?')) return;
-  try {
-    const fd = new FormData(); fd.append('status','sold'); fd.append('initData', initData());
-    await api(`/api/admin/accounts/${id}`, { method: 'PUT', body: fd });
-    showToast('✅ Marked as sold');
-    await Promise.all([loadAccounts(), loadStats()]);
-  } catch (e) { showToast('❌ ' + e.message); }
-}
+    <!-- ── Accounts Tab ───────────────────────────────── -->
+    <div class="tab" id="tab-accounts">
+      <div class="page-header">
+        <h1 class="page-title">إدارة الحسابات</h1>
+        <button class="header-btn" onclick="loadAccounts()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c-1.657 0-3-4.03-3-9s1.343-9 3-9m0 18c1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 0 1 9-9"/></svg>
+          تحديث
+        </button>
+      </div>
 
-async function delAccount(id) {
-  if (!confirm('Delete this account permanently?')) return;
-  try {
-    await api(`/api/admin/accounts/${id}`, { method: 'DELETE' });
-    showToast('🗑️ Deleted');
-    await Promise.all([loadAccounts(), loadStats()]);
-  } catch (e) { showToast('❌ ' + e.message); }
-}
+      <div class="search-row">
+        <div class="search-box">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input id="accountSearch" type="text" placeholder="ابحث بالاسم، السنة، الحالة…"/>
+        </div>
+      </div>
 
-// ── Edit Modal ────────────────────────────────────────
-function openEdit(id) {
-  const a = accountsData.find(x => x.id === id);
-  if (!a) return;
-  setVal('editId',     a.id);
-  setVal('editName',   a.name);
-  setVal('editPrice',  a.price);
-  setVal('editYear',   a.creation_year || '');
-  setVal('editStatus', a.status);
-  setVal('editDesc',   a.description || '');
-  document.getElementById('editModal').classList.remove('hidden');
-}
-function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v; }
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الاسم</th>
+              <th>السنة</th>
+              <th>السعر</th>
+              <th>الحالة</th>
+              <th>التصنيف</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="accountsTbody"></tbody>
+        </table>
+        <div id="accountsEmpty" class="table-empty hidden">
+          <div class="empty-icon">📭</div>
+          <p>لا توجد حسابات بعد</p>
+        </div>
+      </div>
+    </div>
 
-function closeEdit() { document.getElementById('editModal').classList.add('hidden'); }
-document.getElementById('editClose').addEventListener('click', closeEdit);
-document.getElementById('editCancel').addEventListener('click', closeEdit);
-document.getElementById('editModal').addEventListener('click', e => { if (e.target.id === 'editModal') closeEdit(); });
+    <!-- ── Add Account Tab ────────────────────────────── -->
+    <div class="tab" id="tab-add">
+      <div class="page-header">
+        <h1 class="page-title">إضافة حساب جديد</h1>
+      </div>
 
-document.getElementById('editForm').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  const id = document.getElementById('editId').value;
-  const fd = new FormData(this);
-  fd.append('initData', initData());
-  try {
-    await api(`/api/admin/accounts/${id}`, { method: 'PUT', body: fd });
-    showToast('💾 Saved');
-    closeEdit();
-    await Promise.all([loadAccounts(), loadStats()]);
-  } catch (err) { showToast('❌ ' + err.message); }
-});
+      <div class="form-card">
+        <form id="addForm" autocomplete="off">
 
-// ── Add Form ──────────────────────────────────────────
-const dropZone     = document.getElementById('dropZone');
-const imageInput   = document.getElementById('imageInput');
-const dropContent  = document.getElementById('dropContent');
-const imagePreview = document.getElementById('imagePreview');
-const previewImg   = document.getElementById('previewImg');
-const removePreview= document.getElementById('removePreview');
-const addResult    = document.getElementById('addResult');
+          <div class="field-row">
+            <div class="field">
+              <label for="addName">اسم الحساب *</label>
+              <input type="text" id="addName" name="name" placeholder="مثال: @username_2012" required/>
+            </div>
+            <div class="field">
+              <label for="addPrice">السعر (USD) *</label>
+              <input type="number" id="addPrice" name="price" placeholder="0.00" min="0" step="0.01" required/>
+            </div>
+          </div>
 
-// Drag & drop
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave',()  => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault(); dropZone.classList.remove('drag-over');
-  const file = e.dataTransfer.files[0];
-  if (file) { imageInput.files = e.dataTransfer.files; showPreview(file); }
-});
-imageInput.addEventListener('change', () => { if (imageInput.files[0]) showPreview(imageInput.files[0]); });
+          <div class="field-row">
+            <div class="field">
+              <label for="addYear">سنة الإنشاء</label>
+              <input type="number" id="addYear" name="creation_year" placeholder="2012" min="2006" max="2023"/>
+            </div>
+            <div class="field">
+              <label for="addCategory">التصنيف</label>
+              <select id="addCategory" name="category">
+                <option value="twitter">Twitter/X</option>
+                <option value="aged">Aged Account</option>
+                <option value="verified">Verified</option>
+                <option value="other">أخرى</option>
+              </select>
+            </div>
+          </div>
 
-function showPreview(file) {
-  const reader = new FileReader();
-  reader.onload = ev => {
-    previewImg.src = ev.target.result;
-    dropContent.classList.add('hidden');
-    imagePreview.classList.remove('hidden');
-  };
-  reader.readAsDataURL(file);
-}
-removePreview.addEventListener('click', () => {
-  imageInput.value = '';
-  previewImg.src   = '';
-  imagePreview.classList.add('hidden');
-  dropContent.classList.remove('hidden');
-});
+          <div class="field">
+            <label for="addDesc">الوصف</label>
+            <textarea id="addDesc" name="description" placeholder="أدخل وصفاً للحساب…" rows="3"></textarea>
+          </div>
 
-document.getElementById('resetBtn').addEventListener('click', () => {
-  imageInput.value = '';
-  previewImg.src   = '';
-  imagePreview.classList.add('hidden');
-  dropContent.classList.remove('hidden');
-  addResult.classList.add('hidden');
-});
+          <div class="field">
+            <label>صورة الحساب</label>
+            <div id="dropZone" class="drop-zone">
+              <div id="dropContent" class="drop-content">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <p>اسحب وأفلت الصورة هنا<br/><span>أو انقر للاختيار</span></p>
+                <input type="file" id="imageInput" name="image" accept="image/*" hidden/>
+              </div>
+              <div id="imagePreview" class="drop-preview hidden">
+                <img id="previewImg" src="" alt="preview"/>
+                <button type="button" id="removePreview" class="remove-preview">✕</button>
+              </div>
+            </div>
+          </div>
 
-document.getElementById('addForm').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  const btn = document.getElementById('addSubmitBtn');
-  btn.disabled = true; btn.textContent = '⏳ Adding…';
+          <div id="addResult" class="form-feedback hidden"></div>
 
-  const fd = new FormData(this);
-  fd.append('initData', initData());
-  try {
-    const data = await api('/api/admin/accounts', { method: 'POST', body: fd });
-    addResult.textContent = `✅ Account #${data.id} added successfully!`;
-    addResult.className   = 'form-feedback feedback-ok';
-    addResult.classList.remove('hidden');
-    this.reset();
-    imagePreview.classList.add('hidden');
-    dropContent.classList.remove('hidden');
-    showToast('✅ Account added!');
-    await Promise.all([loadAccounts(), loadStats()]);
-  } catch (err) {
-    addResult.textContent = '❌ ' + err.message;
-    addResult.className   = 'form-feedback feedback-err';
-    addResult.classList.remove('hidden');
-    showToast('❌ ' + err.message);
-  } finally {
-    btn.disabled = false; btn.textContent = '➕ Add Account';
-  }
-});
+          <div class="form-actions">
+            <button type="submit" id="addSubmitBtn" class="btn btn-primary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+              إضافة الحساب
+            </button>
+            <button type="button" id="resetBtn" class="btn btn-ghost">إعادة تعيين</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
-// ── Orders ────────────────────────────────────────────
-async function loadOrders() {
-  try {
-    const orders = await api('/api/admin/orders');
-    renderOrders(orders);
-  } catch (e) { showToast('⚠️ Could not load orders'); }
-}
+    <!-- ── Orders Tab ─────────────────────────────────── -->
+    <div class="tab" id="tab-orders">
+      <div class="page-header">
+        <h1 class="page-title">إدارة الطلبات</h1>
+        <button class="header-btn" onclick="loadOrders()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c-1.657 0-3-4.03-3-9s1.343-9 3-9m0 18c1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 0 1 9-9"/></svg>
+          تحديث
+        </button>
+      </div>
 
-function renderOrders(orders) {
-  const tbody = document.getElementById('ordersTbody');
-  const empty = document.getElementById('ordersEmpty');
-  if (!orders.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); return; }
-  empty.classList.add('hidden');
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الحساب</th>
+              <th>المشتري</th>
+              <th>الحالة</th>
+              <th>التاريخ</th>
+              <th>تغيير الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="ordersTbody"></tbody>
+        </table>
+        <div id="ordersEmpty" class="table-empty hidden">
+          <div class="empty-icon">📭</div>
+          <p>لا توجد طلبات بعد</p>
+        </div>
+      </div>
+    </div>
 
-  const statuses = ['pending','paid','completed','cancelled'];
-  tbody.innerHTML = orders.map(o => `
-    <tr>
-      <td style="color:var(--text-3)">#${o.id}</td>
-      <td style="font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis">${esc(o.account_name || '—')}</td>
-      <td>@${esc(o.buyer_username || 'unknown')}<br/><small style="color:var(--text-3)">${o.buyer_id}</small></td>
-      <td><span class="spill sp-${o.status}">${o.status}</span></td>
-      <td style="color:var(--text-3)">${fmtDate(o.created_at)}</td>
-      <td>
-        <select class="status-sel" onchange="updateOrder(${o.id}, this.value)">
-          ${statuses.map(s=>`<option value="${s}"${s===o.status?' selected':''}>${s}</option>`).join('')}
-        </select>
-      </td>
-    </tr>`).join('');
-}
+  </main><!-- /content -->
+</div><!-- /adminApp -->
 
-async function updateOrder(id, status) {
-  try {
-    await api(`/api/admin/orders/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Init-Data': initData() },
-      body: JSON.stringify({ status })
-    });
-    showToast(`📋 Order #${id} → ${status}`);
-    loadStats();
-  } catch (e) { showToast('❌ ' + e.message); }
-}
+<!-- ── Edit Modal ─────────────────────────────────────────── -->
+<div id="editModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>تعديل الحساب</h2>
+      <button id="editClose" class="modal-close">✕</button>
+    </div>
+    <form id="editForm" autocomplete="off">
+      <input type="hidden" id="editId" name="id"/>
 
-// ── Helpers ───────────────────────────────────────────
-function esc(str) {
-  if (str == null) return '';
-  return String(str)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function fmtDate(ts) {
-  if (!ts) return '—';
-  return new Date(ts).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-}
-function showToast(msg, dur = 3500) {
-  toast.textContent = msg;
-  toast.classList.add('show');
-  clearTimeout(toastT);
-  toastT = setTimeout(() => toast.classList.remove('show'), dur);
-}
+      <div class="field-row">
+        <div class="field">
+          <label>الاسم *</label>
+          <input type="text" id="editName" name="name" required/>
+        </div>
+        <div class="field">
+          <label>السعر (USD)</label>
+          <input type="number" id="editPrice" name="price" min="0" step="0.01"/>
+        </div>
+      </div>
 
-// Auto-refresh stats every 60s
-setInterval(loadStats, 60_000);
+      <div class="field-row">
+        <div class="field">
+          <label>سنة الإنشاء</label>
+          <input type="number" id="editYear" name="creation_year" min="2006" max="2023"/>
+        </div>
+        <div class="field">
+          <label>الحالة</label>
+          <select id="editStatus" name="status">
+            <option value="available">متاح</option>
+            <option value="reserved">محجوز</option>
+            <option value="sold">مباع</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>الوصف</label>
+        <textarea id="editDesc" name="description" rows="3"></textarea>
+      </div>
+
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary">💾 حفظ</button>
+        <button type="button" id="editCancel" class="btn btn-ghost">إلغاء</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Toast ──────────────────────────────────────────────── -->
+<div id="toast" class="toast"></div>
+
+<script src="/static/js/admin.js"></script>
+</body>
+</html>

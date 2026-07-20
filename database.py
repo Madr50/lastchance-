@@ -1,211 +1,180 @@
-# database.py
+# database.py — thread-safe SQLite with per-thread connections
 import sqlite3
-import json
 import logging
+import threading
 from datetime import datetime
 
 DB_NAME = "shop.db"
-logger = logging.getLogger(__name__)
+logger  = logging.getLogger(__name__)
+
+_local = threading.local()
 
 
-def get_conn():
-    conn = sqlite3.connect(DB_NAME, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+def get_conn() -> sqlite3.Connection:
+    """Return a per-thread SQLite connection (opens once per thread)."""
+    if not getattr(_local, "conn", None):
+        conn = sqlite3.connect(DB_NAME, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        _local.conn = conn
+    return _local.conn
 
 
-def init_db():
+def init_db() -> None:
     conn = get_conn()
-    c = conn.cursor()
+    c    = conn.cursor()
 
-    c.execute('''
+    c.executescript("""
         CREATE TABLE IF NOT EXISTS accounts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            description TEXT,
-            price REAL NOT NULL,
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            name          TEXT    NOT NULL,
+            description   TEXT,
+            price         REAL    NOT NULL,
             creation_year INTEGER,
-            category TEXT DEFAULT 'twitter',
-            image_path TEXT,
-            status TEXT DEFAULT 'available',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+            category      TEXT    DEFAULT 'twitter',
+            image_path    TEXT,
+            status        TEXT    DEFAULT 'available',
+            created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
 
-    c.execute('''
         CREATE TABLE IF NOT EXISTS orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_id INTEGER,
-            buyer_id INTEGER,
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id     INTEGER,
+            buyer_id       INTEGER,
             buyer_username TEXT,
-            status TEXT DEFAULT 'pending',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status         TEXT DEFAULT 'pending',
+            created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (account_id) REFERENCES accounts(id)
-        )
-    ''')
+        );
 
-    c.execute('''
         CREATE TABLE IF NOT EXISTS admins (
             telegram_id INTEGER PRIMARY KEY,
-            username TEXT,
-            is_active BOOLEAN DEFAULT 1
-        )
-    ''')
+            username    TEXT,
+            is_active   BOOLEAN DEFAULT 1
+        );
+    """)
 
-    # Insert default admin
-    c.execute('''
-        INSERT OR IGNORE INTO admins (telegram_id, username) VALUES (?, ?)
-    ''', (8989271393, 'l825h'))
-
+    import os
+    admin_id       = int(os.environ.get("ADMIN_ID", "8989271393"))
+    admin_username = os.environ.get("ADMIN_USERNAME", "l825h")
+    c.execute(
+        "INSERT OR IGNORE INTO admins (telegram_id, username) VALUES (?, ?)",
+        (admin_id, admin_username)
+    )
     conn.commit()
-    conn.close()
-    logger.info("Database initialised.")
+    logger.info("✅ Database initialised (WAL mode).")
 
 
-# ── Accounts ──────────────────────────────────────────────
+# ── Accounts ───────────────────────────────────────────────
 
 def add_account(name, description, price, creation_year=None,
-                category='twitter', image_path=None):
+                category="twitter", image_path=None) -> int:
     conn = get_conn()
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO accounts (name, description, price, creation_year, category, image_path)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (name, description, price, creation_year, category, image_path))
-    conn.commit()
-    account_id = c.lastrowid
-    conn.close()
-    return account_id
-
-
-def get_all_accounts(status='available'):
-    conn = get_conn()
-    c = conn.cursor()
+    c    = conn.cursor()
     c.execute(
-        'SELECT * FROM accounts WHERE status=? ORDER BY created_at DESC',
-        (status,)
+        "INSERT INTO accounts (name, description, price, creation_year, category, image_path) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (name, description, float(price), creation_year, category, image_path)
     )
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return rows
+    conn.commit()
+    return c.lastrowid
 
 
-def get_all_accounts_admin():
+def get_all_accounts(status="available") -> list[dict]:
     conn = get_conn()
-    c = conn.cursor()
-    c.execute('SELECT * FROM accounts ORDER BY created_at DESC')
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return rows
+    rows = conn.execute(
+        "SELECT * FROM accounts WHERE status=? ORDER BY created_at DESC", (status,)
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
-def get_account(account_id):
+def get_all_accounts_admin() -> list[dict]:
     conn = get_conn()
-    c = conn.cursor()
-    c.execute('SELECT * FROM accounts WHERE id=?', (account_id,))
-    row = c.fetchone()
-    conn.close()
+    rows = conn.execute(
+        "SELECT * FROM accounts ORDER BY created_at DESC"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_account(account_id: int) -> dict | None:
+    conn = get_conn()
+    row  = conn.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
     return dict(row) if row else None
 
 
-def update_account(account_id, **kwargs):
-    allowed = ['name', 'description', 'price', 'creation_year',
-               'category', 'image_path', 'status']
+def update_account(account_id: int, **kwargs) -> None:
+    allowed = {"name", "description", "price", "creation_year", "category", "image_path", "status"}
     updates = {k: v for k, v in kwargs.items() if k in allowed}
     if not updates:
         return
-    conn = get_conn()
-    c = conn.cursor()
-    set_clause = ', '.join([f"{k}=?" for k in updates])
-    values = list(updates.values()) + [account_id]
-    c.execute(
-        f'UPDATE accounts SET {set_clause}, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+    conn       = get_conn()
+    set_clause = ", ".join(f"{k}=?" for k in updates)
+    values     = [*updates.values(), account_id]
+    conn.execute(
+        f"UPDATE accounts SET {set_clause}, updated_at=CURRENT_TIMESTAMP WHERE id=?",
         values
     )
     conn.commit()
-    conn.close()
 
 
-def delete_account(account_id):
+def delete_account(account_id: int) -> None:
     conn = get_conn()
-    c = conn.cursor()
-    c.execute('DELETE FROM accounts WHERE id=?', (account_id,))
+    conn.execute("DELETE FROM accounts WHERE id=?", (account_id,))
     conn.commit()
-    conn.close()
 
 
-# ── Orders ────────────────────────────────────────────────
+# ── Orders ─────────────────────────────────────────────────
 
-def create_order(account_id, buyer_id, buyer_username):
+def create_order(account_id: int, buyer_id: int, buyer_username: str) -> int:
     conn = get_conn()
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO orders (account_id, buyer_id, buyer_username)
-        VALUES (?, ?, ?)
-    ''', (account_id, buyer_id, buyer_username))
+    c    = conn.cursor()
+    c.execute(
+        "INSERT INTO orders (account_id, buyer_id, buyer_username) VALUES (?, ?, ?)",
+        (account_id, buyer_id, buyer_username)
+    )
     conn.commit()
-    order_id = c.lastrowid
-    conn.close()
-    return order_id
+    return c.lastrowid
 
 
-def get_all_orders():
+def get_all_orders() -> list[dict]:
     conn = get_conn()
-    c = conn.cursor()
-    c.execute('''
-        SELECT o.*, a.name as account_name, a.price as account_price
-        FROM orders o
+    rows = conn.execute("""
+        SELECT o.*, a.name AS account_name, a.price AS account_price
+        FROM   orders   o
         LEFT JOIN accounts a ON o.account_id = a.id
         ORDER BY o.created_at DESC
-    ''')
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return rows
+    """).fetchall()
+    return [dict(r) for r in rows]
 
 
-def update_order(order_id, status):
+def update_order(order_id: int, status: str) -> None:
     conn = get_conn()
-    c = conn.cursor()
-    c.execute('UPDATE orders SET status=? WHERE id=?', (status, order_id))
+    conn.execute("UPDATE orders SET status=? WHERE id=?", (status, order_id))
     conn.commit()
-    conn.close()
 
 
-# ── Stats ─────────────────────────────────────────────────
+# ── Stats ──────────────────────────────────────────────────
 
-def get_stats():
+def get_stats() -> dict:
     conn = get_conn()
-    c = conn.cursor()
+    def scalar(sql, *args):
+        return conn.execute(sql, args).fetchone()[0]
 
-    c.execute("SELECT COUNT(*) FROM accounts")
-    total = c.fetchone()[0]
-
-    c.execute("SELECT COUNT(*) FROM accounts WHERE status='available'")
-    available = c.fetchone()[0]
-
-    c.execute("SELECT COUNT(*) FROM accounts WHERE status='sold'")
-    sold = c.fetchone()[0]
-
-    c.execute("SELECT COUNT(*) FROM accounts WHERE status='reserved'")
-    reserved = c.fetchone()[0]
-
-    c.execute("SELECT COALESCE(SUM(a.price),0) FROM orders o JOIN accounts a ON o.account_id=a.id WHERE o.status IN ('paid','completed')")
-    revenue = c.fetchone()[0]
-
-    c.execute("SELECT COUNT(*) FROM orders")
-    total_orders = c.fetchone()[0]
-
-    conn.close()
     return {
-        'total': total,
-        'available': available,
-        'sold': sold,
-        'reserved': reserved,
-        'revenue': revenue,
-        'total_orders': total_orders
+        "total":        scalar("SELECT COUNT(*) FROM accounts"),
+        "available":    scalar("SELECT COUNT(*) FROM accounts WHERE status='available'"),
+        "sold":         scalar("SELECT COUNT(*) FROM accounts WHERE status='sold'"),
+        "reserved":     scalar("SELECT COUNT(*) FROM accounts WHERE status='reserved'"),
+        "revenue":      scalar(
+            "SELECT COALESCE(SUM(a.price),0) FROM orders o "
+            "JOIN accounts a ON o.account_id=a.id "
+            "WHERE o.status IN ('paid','completed')"
+        ),
+        "total_orders": scalar("SELECT COUNT(*) FROM orders"),
     }
 
 
-# Initialise on import
+# ── Initialise on import ───────────────────────────────────
 init_db()

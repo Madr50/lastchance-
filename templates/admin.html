@@ -198,9 +198,9 @@
           <p class="page-sub">كل الحسابات في المتجر</p>
         </div>
         <div class="header-actions">
-          <button class="header-btn" onclick="switchTab('add')">
+          <button class="header-btn btn-add-pulse" onclick="switchTab('add')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            إضافة
+            إضافة حساب
           </button>
           <button class="header-btn" onclick="loadAccounts()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -216,32 +216,23 @@
         </div>
         <div class="filter-chips">
           <button class="chip active" data-filter="all">الكل</button>
-          <button class="chip" data-filter="available">متاح</button>
-          <button class="chip" data-filter="sold">مباع</button>
-          <button class="chip" data-filter="reserved">محجوز</button>
+          <button class="chip" data-filter="available">✅ متاح</button>
+          <button class="chip" data-filter="sold">🔴 مباع</button>
+          <button class="chip" data-filter="reserved">⏳ محجوز</button>
         </div>
       </div>
 
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>الحساب</th>
-              <th>السنة</th>
-              <th>السعر</th>
-              <th>الحالة</th>
-              <th>التصنيف</th>
-              <th>إجراءات</th>
-            </tr>
-          </thead>
-          <tbody id="accountsTbody"></tbody>
-        </table>
-        <div id="accountsEmpty" class="table-empty hidden">
-          <div class="empty-icon">📭</div>
-          <p>لا توجد حسابات بعد</p>
-          <button class="btn btn-primary mt-12" onclick="switchTab('add')">+ إضافة أول حساب</button>
-        </div>
+      <!-- Cards grid (mobile-first) -->
+      <div id="accountsGrid" class="accounts-grid"></div>
+
+      <div id="accountsEmpty" class="table-empty hidden">
+        <div class="empty-icon">📭</div>
+        <p class="empty-title">لا توجد حسابات بعد</p>
+        <p class="empty-sub">أضف أول حساب واجعل متجرك يعمل!</p>
+        <button class="btn btn-primary mt-12" onclick="switchTab('add')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          إضافة أول حساب
+        </button>
       </div>
     </div>
 
@@ -366,7 +357,7 @@
 
 <!-- ── Edit Modal ─────────────────────────────────────── -->
 <div id="editModal" class="modal-overlay hidden">
-  <div class="modal-card">
+  <div class="modal-card modal-card-lg">
     <div class="modal-header">
       <div class="modal-header-left">
         <div class="modal-icon">✏️</div>
@@ -378,16 +369,37 @@
       <input type="hidden" id="editId" name="id"/>
 
       <div class="modal-body">
+
+        <!-- Image section at top -->
+        <div class="edit-img-section">
+          <div class="edit-img-left">
+            <div id="editThumbWrap" class="edit-thumb-wrap">
+              <img id="editThumbImg" src="" alt="" class="edit-thumb hidden"/>
+              <div id="editThumbPlaceholder" class="edit-thumb-placeholder">𝕏</div>
+            </div>
+          </div>
+          <div class="edit-img-right">
+            <label class="field-label">صورة الحساب</label>
+            <label for="editImageInput" class="edit-img-btn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              اختر صورة جديدة
+            </label>
+            <input type="file" id="editImageInput" name="image" accept="image/*" hidden/>
+            <p id="editImgHint" class="edit-img-hint">PNG، JPG، WEBP — بحد أقصى 16MB</p>
+            <p id="editImgName" class="edit-img-chosen hidden"></p>
+          </div>
+        </div>
+
         <div class="field-row">
           <div class="field">
             <label>اسم الحساب *</label>
-            <input type="text" id="editName" name="name" required/>
+            <input type="text" id="editName" name="name" required placeholder="مثال: @username_2012"/>
           </div>
           <div class="field">
             <label>السعر (USD)</label>
             <div class="input-prefix">
               <span class="prefix-icon">$</span>
-              <input type="number" id="editPrice" name="price" min="0" step="0.01"/>
+              <input type="number" id="editPrice" name="price" min="0" step="0.01" placeholder="0.00"/>
             </div>
           </div>
         </div>
@@ -395,12 +407,12 @@
         <div class="field-row">
           <div class="field">
             <label>سنة الإنشاء</label>
-            <input type="number" id="editYear" name="creation_year" min="2006" max="2025"/>
+            <input type="number" id="editYear" name="creation_year" min="2006" max="2025" placeholder="2012"/>
           </div>
           <div class="field">
             <label>الحالة</label>
             <select id="editStatus" name="status">
-              <option value="available">✅ متاح</option>
+              <option value="available">✅ متاح للبيع</option>
               <option value="reserved">⏳ محجوز</option>
               <option value="sold">🔴 مباع</option>
             </select>
@@ -410,16 +422,16 @@
         <div class="field">
           <label>التصنيف</label>
           <select id="editCategory" name="category">
-            <option value="twitter">🐦 Twitter/X</option>
-            <option value="aged">🕰️ Aged Account</option>
-            <option value="verified">✅ Verified</option>
+            <option value="twitter">🐦 Twitter/X عادي</option>
+            <option value="aged">🕰️ Aged Account (قديم)</option>
+            <option value="verified">✅ Verified (موثّق)</option>
             <option value="other">📌 أخرى</option>
           </select>
         </div>
 
         <div class="field">
           <label>الوصف</label>
-          <textarea id="editDesc" name="description" rows="3"></textarea>
+          <textarea id="editDesc" name="description" rows="3" placeholder="أدخل تفاصيل الحساب: عدد المتابعين، البريد الإلكتروني، الهاتف، إلخ…"></textarea>
         </div>
       </div>
 

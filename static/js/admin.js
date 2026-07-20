@@ -243,50 +243,53 @@ function getFilteredAccounts() {
 }
 
 function renderAccounts(list) {
-  const tbody = document.getElementById('accountsTbody');
+  const grid  = document.getElementById('accountsGrid');
   const empty = document.getElementById('accountsEmpty');
   if (!list.length) {
-    tbody.innerHTML = '';
+    grid.innerHTML = '';
     empty.classList.remove('hidden');
     return;
   }
   empty.classList.add('hidden');
-  tbody.innerHTML = list.map(a => `
-    <tr data-id="${a.id}">
-      <td class="td-id">#${a.id}</td>
-      <td>
-        <div class="account-cell">
-          ${a.image ? `<img src="${esc(a.image)}" class="account-thumb" alt=""/>` : '<div class="account-thumb-placeholder">𝕏</div>'}
-          <div class="account-info">
-            <div class="account-name">${esc(a.name)}</div>
-            ${a.description ? `<div class="account-desc">${esc(a.description.substring(0,50))}${a.description.length>50?'…':''}</div>` : ''}
-          </div>
+  grid.innerHTML = list.map(a => `
+    <div class="acc-card sp-border-${a.status}" data-id="${a.id}">
+      <div class="acc-card-img">
+        ${a.image
+          ? `<img src="${esc(a.image)}" alt="${esc(a.name)}" loading="lazy"/>`
+          : `<div class="acc-img-placeholder">𝕏</div>`}
+        <span class="acc-status-pill sp-${a.status}">${statusLabel(a.status)}</span>
+      </div>
+      <div class="acc-card-body">
+        <div class="acc-card-name">${esc(a.name)}</div>
+        <div class="acc-card-meta">
+          <span class="acc-year">${a.creation_year ? '📅 ' + a.creation_year : ''}</span>
+          <span class="acc-cat">${catIcon(a.category)} ${catLabel(a.category)}</span>
         </div>
-      </td>
-      <td class="td-year">${a.creation_year ? `<span class="year-badge">${a.creation_year}</span>` : '—'}</td>
-      <td class="td-price">$${Number(a.price).toFixed(2)}</td>
-      <td><span class="spill sp-${a.status}">${statusLabel(a.status)}</span></td>
-      <td class="td-cat"><span class="cat-badge">${catIcon(a.category)} ${esc(a.category || 'twitter')}</span></td>
-      <td>
-        <div class="action-row">
-          <button class="act-btn act-edit" onclick="openEdit(${a.id})" title="تعديل">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            تعديل
-          </button>
-          <button class="act-btn act-sold" onclick="markSold(${a.id})" title="تعيين مباع">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            بيع
-          </button>
-          <button class="act-btn act-del" onclick="confirmDelete(${a.id})" title="حذف">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-          </button>
-        </div>
-      </td>
-    </tr>`).join('');
+        ${a.description ? `<div class="acc-desc">${esc(a.description.substring(0,80))}${a.description.length>80?'…':''}</div>` : ''}
+        <div class="acc-price">${Number(a.price).toFixed(2)}</div>
+      </div>
+      <div class="acc-card-actions">
+        <button class="acc-act-btn acc-act-edit" onclick="openEdit(${a.id})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          تعديل
+        </button>
+        <button class="acc-act-btn acc-act-sell" onclick="markSold(${a.id})" ${a.status==='sold'?'disabled':''}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          ${a.status==='sold' ? 'مباع' : 'تعيين مباع'}
+        </button>
+        <button class="acc-act-btn acc-act-del" onclick="confirmDelete(${a.id})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          حذف
+        </button>
+      </div>
+    </div>`).join('');
 }
 
 function catIcon(c) {
   return { twitter:'🐦', aged:'🕰️', verified:'✅', other:'📌' }[c] || '📌';
+}
+function catLabel(c) {
+  return { twitter:'Twitter/X', aged:'Aged', verified:'Verified', other:'أخرى' }[c] || c || 'Twitter/X';
 }
 function statusLabel(s) {
   return { available:'متاح', sold:'مباع', reserved:'محجوز' }[s] || s;
@@ -377,9 +380,50 @@ function openEdit(id) {
   setVal('editStatus',   a.status);
   setVal('editCategory', a.category || 'twitter');
   setVal('editDesc',     a.description || '');
+
+  // Image preview in edit modal
+  const thumbImg   = document.getElementById('editThumbImg');
+  const thumbPh    = document.getElementById('editThumbPlaceholder');
+  const imgInput   = document.getElementById('editImageInput');
+  const imgName    = document.getElementById('editImgName');
+  const imgHint    = document.getElementById('editImgHint');
+  imgInput.value   = '';
+  imgName.classList.add('hidden');
+  imgHint.classList.remove('hidden');
+  if (a.image) {
+    thumbImg.src = a.image;
+    thumbImg.classList.remove('hidden');
+    thumbPh.classList.add('hidden');
+  } else {
+    thumbImg.src = '';
+    thumbImg.classList.add('hidden');
+    thumbPh.classList.remove('hidden');
+  }
+
   document.getElementById('editModal').classList.remove('hidden');
   document.getElementById('editName').focus();
 }
+
+// Show chosen file name when user picks image in edit modal
+document.getElementById('editImageInput').addEventListener('change', function() {
+  const imgName = document.getElementById('editImgName');
+  const imgHint = document.getElementById('editImgHint');
+  const thumbImg = document.getElementById('editThumbImg');
+  const thumbPh  = document.getElementById('editThumbPlaceholder');
+  if (this.files[0]) {
+    imgName.textContent = '📎 ' + this.files[0].name;
+    imgName.classList.remove('hidden');
+    imgHint.classList.add('hidden');
+    // Live preview
+    const r = new FileReader();
+    r.onload = ev => {
+      thumbImg.src = ev.target.result;
+      thumbImg.classList.remove('hidden');
+      thumbPh.classList.add('hidden');
+    };
+    r.readAsDataURL(this.files[0]);
+  }
+});
 
 function setVal(id, v) {
   const el = document.getElementById(id);

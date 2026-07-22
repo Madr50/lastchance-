@@ -25,6 +25,12 @@ def _webapp(path: str) -> Optional[WebAppInfo]:
     return WebAppInfo(url=url) if url else None
 
 
+def usd_to_stars(price_usd: float) -> int:
+    """Convert USD price to Telegram Stars (1 USD ≈ 50 Stars)."""
+    stars = round(price_usd * 50)
+    return max(stars, 1)
+
+
 # ── Main menu (premium layout like reference image) ────────
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     wa = _webapp("/")
@@ -83,7 +89,27 @@ def account_card_keyboard(acc_id: int) -> InlineKeyboardMarkup:
     ])
 
 
-# ── Buy confirmation ───────────────────────────────────────
+# ── Payment method selection ───────────────────────────────
+def payment_method_keyboard(acc_id: int, price_usd: float) -> InlineKeyboardMarkup:
+    stars = usd_to_stars(price_usd)
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                f"⭐ ادفع بالنجوم  ({stars} نجمة)",
+                callback_data=f"pay_stars_{acc_id}"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                f"💎 ادفع بـ USDT  (${price_usd:.2f})",
+                callback_data=f"pay_usdt_{acc_id}"
+            ),
+        ],
+        [InlineKeyboardButton("❌  إلغاء", callback_data="list_accounts")],
+    ])
+
+
+# ── Buy confirmation (kept for backward compat) ────────────
 def buy_confirm_keyboard(acc_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✅  تأكيد الشراء", callback_data=f"confirm_buy_{acc_id}")],

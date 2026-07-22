@@ -1,11 +1,11 @@
-# bot_handlers.py — Complete premium bot with full admin management
+# bot_handlers.py — Complete premium bot with Stars + USDT payments
 import logging
 import os
-from telegram import Update, InputMediaPhoto
+from telegram import Update, InputMediaPhoto, LabeledPrice
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-from config import ADMIN_ID, ADMIN_USERNAME, SHOP_NAME
+from config import ADMIN_ID, ADMIN_USERNAME, SHOP_NAME, USDT_ADDRESS
 from database import (
     get_all_accounts, get_account, get_all_accounts_admin,
     create_order, update_account, delete_account,
@@ -14,11 +14,12 @@ from database import (
 )
 from bot_keyboards import (
     main_menu_keyboard, admin_keyboard,
-    account_card_keyboard, back_to_menu_keyboard, buy_confirm_keyboard,
+    account_card_keyboard, back_to_menu_keyboard,
+    payment_method_keyboard,
     admin_account_keyboard, admin_delete_confirm_keyboard,
     admin_edit_field_keyboard, admin_order_keyboard,
     accounts_page_keyboard, user_accounts_page_keyboard,
-    admin_keyboard
+    usd_to_stars
 )
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,36 @@ def _build_stats_text(stats: dict) -> str:
     )
 
 
+async def _deliver_account(bot, buyer_id: int, order: dict) -> bool:
+    """Send account credentials to the buyer. Returns True on success."""
+    email    = order.get('account_email') or '—'
+    password = order.get('account_password') or '—'
+    features = order.get('account_features') or ''
+
+    msg = (
+        f"🎉 <b>مبروك! تم تأكيد دفعك</b>\n"
+        f"{_divider()}\n\n"
+        f"📦 الحساب: <b>{order.get('account_name', '—')}</b>\n\n"
+        f"{_divider()}\n"
+        f"🔐 <b>بيانات دخول حسابك:</b>\n\n"
+        f"📧 الإيميل:  <code>{email}</code>\n"
+        f"🔑 الباسورد: <code>{password}</code>\n\n"
+    )
+    if features:
+        msg += f"⭐ المميزات: {features}\n\n"
+    msg += (
+        f"{_divider()}\n"
+        f"📞 للدعم: <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>\n\n"
+        "✨ <i>شكراً لثقتك بنا — استمتع بحسابك!</i>"
+    )
+    try:
+        await bot.send_message(chat_id=buyer_id, text=msg, parse_mode=ParseMode.HTML)
+        return True
+    except Exception as e:
+        logger.warning(f"Could not deliver credentials to {buyer_id}: {e}")
+        return False
+
+
 # ── /start ─────────────────────────────────────────────────
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -126,7 +157,6 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     stats = get_stats()
     name  = user.first_name or "صديقي"
 
-    # Reset any active conversation state
     context.user_data.clear()
 
     text = (
@@ -139,6 +169,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "  ⚡  تسليم فوري بعد تأكيد الدفع\n"
         "  🔒  ضمان الجودة والأمان التام\n"
         "  💎  أندر الحسابات وأقدمها\n\n"
+        f"  ⭐  ادفع بنجوم تيليجرام — تسليم <b>فوري تلقائي</b>\n"
+        f"  💎  ادفع بـ USDT TRC20\n\n"
         f"{_divider()}\n"
         f"📦  <b>{stats['available']}</b> حساب متاح الآن\n\n"
         "👇 <i>اختر من القائمة أدناه للبدء</i>"
@@ -213,6 +245,85 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
 
 
+# ── Successful Payment Handler (Telegram Stars) ────────────
+
+async def successful_payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Called automatically when a Stars payment succeeds."""
+    payment = update.message.successful_payment
+    payload = payment.invoice_payload  # format: "acc_{acc_id}_{buyer_id}"
+
+    try:
+        parts  = payload.split("_")
+        acc_id = int(parts[1])
+        buyer_id = int(parts[2])
+    except (IndexError, ValueError):
+        logger.error(f"Bad Stars payment payload: {payload}")
+        await update.message.reply_text(
+            "✅ <b>تم استلام دفعتك!</b>\n\n"
+            f"تواصل مع الأدمن: <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    account = get_account(acc_id)
+    if not account:
+        logger.error(f"Stars payment for nonexistent account {acc_id}")
+        await update.message.reply_text(
+            "✅ <b>تم استلام دفعتك!</b>\n\n"
+            f"تواصل مع الأدمن: <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    user           = update.effective_user
+    buyer_username = user.username or "unknown"
+    order_id       = create_order(acc_id, buyer_id, buyer_username)
+    update_account(acc_id, status='sold')
+    update_order(order_id, 'completed')
+
+    # Deliver credentials immediately
+    order = get_order(order_id)
+    delivered = await _deliver_account(context.bot, buyer_id, order)
+
+    # Notify admin
+    stars_paid = payment.total_amount
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=(
+                f"⭐ <b>دفع بالنجوم — تم التسليم التلقائي!</b>\n"
+                f"{_divider()}\n\n"
+                f"🆔 الطلب:    <code>#{order_id}</code>\n"
+                f"📦 الحساب:  <b>{account['name']}</b>\n"
+                f"💰 السعر:   <b>${account['price']:.2f}</b>\n"
+                f"⭐ النجوم:  <b>{stars_paid}</b>\n"
+                f"👤 المشتري: @{buyer_username}  (<code>{buyer_id}</code>)\n\n"
+                f"{'📬 تم إرسال بيانات الدخول للمشتري ⚡' if delivered else '⚠️ فشل الإرسال التلقائي — أرسل البيانات يدوياً'}"
+            ),
+            parse_mode=ParseMode.HTML
+        )
+    except Exception as e:
+        logger.warning(f"Could not notify admin of Stars payment: {e}")
+
+
+# ── Pre-Checkout Query Handler ─────────────────────────────
+
+async def pre_checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Approve all pre-checkout queries for Stars payments."""
+    query = update.pre_checkout_query
+    try:
+        parts  = query.invoice_payload.split("_")
+        acc_id = int(parts[1])
+        account = get_account(acc_id)
+        if account and account['status'] == 'available':
+            await query.answer(ok=True)
+        else:
+            await query.answer(ok=False, error_message="❌ عذراً، هذا الحساب لم يعد متاحاً.")
+    except Exception as e:
+        logger.error(f"Pre-checkout error: {e}")
+        await query.answer(ok=False, error_message="❌ حدث خطأ، تواصل مع الأدمن.")
+
+
 # ── Message Handler (admin conversation) ──────────────────
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -221,7 +332,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     state = context.user_data.get(STATE, S_IDLE)
 
     if state == S_IDLE:
-        return  # Ignore non-command messages from non-admin in idle
+        return
 
     if not _is_admin(user.id):
         return
@@ -326,7 +437,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
 
     elif state == S_ADD_PHOTO:
-        # Text received at photo step — only "-" is valid (skip photo)
         if text == "-":
             context.user_data[DRAFT]["image_path"] = None
             await _finalize_add_account(update, context)
@@ -380,7 +490,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # ── Photo Handler ──────────────────────────────────────────
 
 async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle photo uploads during admin flows."""
     user  = update.effective_user
     if not _is_admin(user.id):
         return
@@ -388,11 +497,9 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     state = context.user_data.get(STATE, S_IDLE)
 
     if state == S_ADD_PHOTO:
-        # Save photo file_id for later download
-        photo  = update.message.photo[-1]  # highest resolution
+        photo  = update.message.photo[-1]
         bot    = context.bot
 
-        # Download photo
         photo_file = await bot.get_file(photo.file_id)
         import time
         filename  = f"{int(time.time())}_{photo.file_id[:8]}.jpg"
@@ -426,15 +533,7 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
 
-async def _handle_photo_skip(text: str, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Called when admin sends '-' for photo during add flow."""
-    if text == "-" and context.user_data.get(STATE) == S_ADD_PHOTO:
-        context.user_data[DRAFT]["image_path"] = None
-        await _finalize_add_account(update, context)
-
-
 async def _finalize_add_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Save the new account and notify."""
     draft = context.user_data.get(DRAFT, {})
     acc_id = add_account(
         name         = draft.get("name", "حساب جديد"),
@@ -595,7 +694,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "✅ <b>جميع الأسعار تشمل:</b>\n"
             "  • ضمان أصالة الحساب\n"
             "  • تسليم فوري بعد الدفع\n"
-            "  • دعم ما بعد البيع"
+            "  • دعم ما بعد البيع\n\n"
+            f"{_divider()}\n"
+            "⭐ <b>الدفع بالنجوم:</b> تسليم فوري تلقائي 100٪\n"
+            "💎 <b>الدفع بـ USDT:</b> تسليم فور تأكيد الأدمن"
         )
         await query.edit_message_text(
             text, parse_mode=ParseMode.HTML, reply_markup=back_to_menu_keyboard()
@@ -609,11 +711,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"{_divider()}\n\n"
             "1️⃣  تصفح الحسابات المتاحة من القائمة\n\n"
             "2️⃣  اختر الحساب الذي يناسبك واضغط <b>اشتري</b>\n\n"
-            "3️⃣  تأكيد الطلب وستحصل على رقم طلبك\n\n"
-            "4️⃣  تواصل مع الأدمن وأرسل له رقم طلبك:\n"
-            f"    📞 <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>\n\n"
-            "5️⃣  أتمّ الدفع عبر الوسيلة المتفق عليها\n\n"
-            "6️⃣  يتحقق الأدمن من الدفع ويرسل لك بيانات الحساب <b>فوراً</b> ⚡\n\n"
+            "3️⃣  اختر طريقة الدفع:\n\n"
+            "   ⭐ <b>نجوم تيليجرام</b>\n"
+            "      • ادفع مباشرة داخل التطبيق\n"
+            "      • تسليم بيانات الحساب <b>فوراً وتلقائياً</b> ⚡\n\n"
+            "   💎 <b>USDT TRC20</b>\n"
+            "      • أرسل المبلغ للعنوان المحدد\n"
+            "      • أرسل صورة الإيصال للأدمن مع رقم طلبك\n"
+            f"      • 📞 <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>\n"
+            "      • يؤكد الأدمن ويرسل البيانات <b>فوراً</b>\n\n"
             f"{_divider()}\n"
             "✨ <i>سريع · آمن · مضمون</i>"
         )
@@ -688,7 +794,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
         return
 
-    # ── Buy (user) ────────────────────────────────────────
+    # ── Buy (user) — show payment method selection ────────
     if data.startswith("buy_") and not data.startswith("buy_confirm"):
         try:
             acc_id  = int(data.split("_", 1)[1])
@@ -704,25 +810,82 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
             return
 
+        stars = usd_to_stars(account['price'])
         year_line = f"  📅  سنة الإنشاء: <b>{account['creation_year']}</b>\n" if account.get('creation_year') else ""
         text = (
-            f"🛒 <b>تأكيد الشراء</b>\n"
+            f"🛒 <b>اختر طريقة الدفع</b>\n"
             f"{_divider()}\n\n"
             f"📦 الحساب: <b>{account['name']}</b>\n"
             f"{year_line}"
             f"💰 السعر:  <b>${account['price']:.2f}</b>\n\n"
-            f"{_divider()}\n"
-            "⚡ بعد تأكيدك سيتم حجز الحساب باسمك\n"
-            "📞 ثم تواصل مع الأدمن لإتمام الدفع واستلام بيانات الدخول\n\n"
-            "هل تريد المتابعة؟"
+            f"{_divider()}\n\n"
+            f"⭐ <b>نجوم تيليجرام</b>  →  {stars} نجمة\n"
+            f"   تسليم فوري <b>تلقائي</b> بعد الدفع ⚡\n\n"
+            f"💎 <b>USDT TRC20</b>  →  ${account['price']:.2f}\n"
+            f"   تسليم بعد تأكيد الأدمن\n\n"
+            "👇 <i>اختر طريقة الدفع المناسبة لك</i>"
         )
         await query.edit_message_text(
-            text, parse_mode=ParseMode.HTML, reply_markup=buy_confirm_keyboard(acc_id)
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=payment_method_keyboard(acc_id, account['price'])
         )
         return
 
-    # ── Confirm buy (user) ────────────────────────────────
-    if data.startswith("confirm_buy_"):
+    # ── Pay with Stars ────────────────────────────────────
+    if data.startswith("pay_stars_"):
+        try:
+            acc_id  = int(data.split("_", 2)[2])
+            account = get_account(acc_id)
+        except (ValueError, IndexError):
+            account = None
+
+        if not account or account['status'] != 'available':
+            await query.edit_message_text(
+                "❌ <b>الحساب لم يعد متاحاً — ربما حجزه شخص آخر.</b>",
+                parse_mode=ParseMode.HTML,
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
+        stars   = usd_to_stars(account['price'])
+        payload = f"acc_{acc_id}_{user.id}"
+        year_info = f" — {account['creation_year']}" if account.get('creation_year') else ""
+
+        try:
+            await context.bot.send_invoice(
+                chat_id=user.id,
+                title=f"🐦 {account['name']}{year_info}",
+                description=(
+                    f"حساب تويتر/X قديم وأصيل\n"
+                    f"السعر: ${account['price']:.2f} • {stars} نجمة\n"
+                    f"تسليم فوري بعد الدفع ⚡"
+                ),
+                payload=payload,
+                currency="XTR",
+                prices=[LabeledPrice(label=account['name'], amount=stars)],
+            )
+            await query.edit_message_text(
+                f"⭐ <b>فاتورة النجوم أُرسلت!</b>\n\n"
+                f"📦 الحساب: <b>{account['name']}</b>\n"
+                f"💫 المبلغ: <b>{stars} نجمة</b>\n\n"
+                "✅ بعد الدفع ستصلك بيانات الحساب <b>فوراً وتلقائياً</b> ⚡",
+                parse_mode=ParseMode.HTML,
+                reply_markup=back_to_menu_keyboard()
+            )
+        except Exception as e:
+            logger.error(f"Failed to send Stars invoice: {e}")
+            await query.edit_message_text(
+                f"❌ <b>فشل إرسال فاتورة النجوم</b>\n\n"
+                f"تأكد أن البوت مفعّل للدفع بالنجوم من BotFather.\n\n"
+                f"تواصل مع الأدمن: <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>",
+                parse_mode=ParseMode.HTML,
+                reply_markup=back_to_menu_keyboard()
+            )
+        return
+
+    # ── Pay with USDT ─────────────────────────────────────
+    if data.startswith("pay_usdt_"):
         try:
             acc_id  = int(data.split("_", 2)[2])
             account = get_account(acc_id)
@@ -743,47 +906,82 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         # Notify admin
         try:
-            admin_msg = (
-                f"🆕 <b>طلب شراء جديد!</b>\n"
-                f"{_divider()}\n\n"
-                f"🆔 رقم الطلب: <code>#{order_id}</code>\n"
-                f"📦 الحساب:   <b>{account['name']}</b>\n"
-                f"💰 السعر:    <b>${account['price']:.2f}</b>\n"
-                f"👤 المشتري:  @{buyer_username}\n"
-                f"🆔 ID:       <code>{user.id}</code>\n\n"
-                "⬇️ اضغط للتأكيد أو الرفض"
-            )
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
-                text=admin_msg,
+                text=(
+                    f"💎 <b>طلب شراء بـ USDT جديد!</b>\n"
+                    f"{_divider()}\n\n"
+                    f"🆔 رقم الطلب: <code>#{order_id}</code>\n"
+                    f"📦 الحساب:   <b>{account['name']}</b>\n"
+                    f"💰 السعر:    <b>${account['price']:.2f} USDT</b>\n"
+                    f"👤 المشتري:  @{buyer_username}\n"
+                    f"🆔 ID:       <code>{user.id}</code>\n\n"
+                    "⬇️ اضغط للتأكيد بعد التحقق من الدفع"
+                ),
                 parse_mode=ParseMode.HTML,
                 reply_markup=admin_order_keyboard(order_id, acc_id)
             )
         except Exception as e:
             logger.warning(f"Could not notify admin: {e}")
 
-        from config import USDT_ADDRESS
         success_text = (
-            f"✅ <b>تم تسجيل طلبك بنجاح!</b>\n"
+            f"💎 <b>طلب USDT مسجّل!</b>\n"
             f"{_divider()}\n\n"
             f"🆔 رقم طلبك: <code>#{order_id}</code>\n"
-            f"📦 الحساب:   <b>{account['name']}</b>\n"
-            f"💰 المبلغ:   <b>${account['price']:.2f}</b>\n\n"
+            f"📦 الحساب:   <b>{account['name']}</b>\n\n"
             f"{_divider()}\n"
-            f"💳 <b>ادفع المبلغ على هذا العنوان:</b>\n\n"
-            f"🔸 <b>USDT TRC20</b>\n"
+            f"📤 <b>أرسل المبلغ التالي:</b>\n\n"
+            f"💵 <b>{account['price']:.2f} USDT</b>  (شبكة TRC20)\n\n"
+            f"📋 <b>عنوان المحفظة:</b>\n"
             f"<code>{USDT_ADDRESS}</code>\n\n"
-            f"💵 المبلغ المطلوب: <b>${account['price']:.2f} USDT</b>\n\n"
             f"{_divider()}\n"
-            f"📸 <b>بعد الدفع أرسل صورة الإيصال لـ:</b>\n"
-            f"   <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>\n"
-            f"   مع رقم طلبك: <code>#{order_id}</code>\n\n"
-            f"⚡ بعد تأكيد الدفع ستصلك بيانات الحساب <b>فوراً</b>"
+            f"📸 <b>بعد الإرسال:</b>\n"
+            f"أرسل صورة الإيصال لـ <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>\n"
+            f"مع رقم طلبك: <code>#{order_id}</code>\n\n"
+            "⚡ <i>تسليم بيانات الحساب فور تأكيد الأدمن</i>"
         )
         await query.edit_message_text(
             success_text,
             parse_mode=ParseMode.HTML,
             reply_markup=back_to_menu_keyboard()
+        )
+        return
+
+    # ── Backward compat: confirm_buy redirects to payment selection ──
+    if data.startswith("confirm_buy_"):
+        try:
+            acc_id  = int(data.split("_", 2)[2])
+            account = get_account(acc_id)
+        except (ValueError, IndexError):
+            account = None
+
+        if not account or account['status'] != 'available':
+            await query.edit_message_text(
+                "❌ <b>الحساب لم يعد متاحاً — ربما حجزه شخص آخر.</b>",
+                parse_mode=ParseMode.HTML,
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
+        stars = usd_to_stars(account['price'])
+        year_line = f"  📅  سنة الإنشاء: <b>{account['creation_year']}</b>\n" if account.get('creation_year') else ""
+        text = (
+            f"🛒 <b>اختر طريقة الدفع</b>\n"
+            f"{_divider()}\n\n"
+            f"📦 الحساب: <b>{account['name']}</b>\n"
+            f"{year_line}"
+            f"💰 السعر:  <b>${account['price']:.2f}</b>\n\n"
+            f"{_divider()}\n\n"
+            f"⭐ <b>نجوم تيليجرام</b>  →  {stars} نجمة\n"
+            f"   تسليم فوري <b>تلقائي</b> بعد الدفع ⚡\n\n"
+            f"💎 <b>USDT TRC20</b>  →  ${account['price']:.2f}\n"
+            f"   تسليم بعد تأكيد الأدمن\n\n"
+            "👇 <i>اختر طريقة الدفع المناسبة لك</i>"
+        )
+        await query.edit_message_text(
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=payment_method_keyboard(acc_id, account['price'])
         )
         return
 
@@ -982,7 +1180,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         return
 
-    # ── Admin confirm order ───────────────────────────────
+    # ── Admin confirm order (USDT manual) ─────────────────
     if data.startswith("admin_confirm_order_"):
         order_id = int(data.split("_")[-1])
         order    = get_order(order_id)
@@ -999,44 +1197,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         update_order(order_id, 'completed')
         update_account(order['account_id'], status='sold')
 
-        # Send credentials to buyer
-        email    = order.get('account_email') or '—'
-        password = order.get('account_password') or '—'
-        features = order.get('account_features') or ''
-
-        buyer_msg = (
-            f"🎉 <b>مبروك! تم تأكيد دفعك</b>\n"
-            f"{_divider()}\n\n"
-            f"📦 الحساب: <b>{order.get('account_name','—')}</b>\n\n"
-            f"{_divider()}\n"
-            f"🔐 <b>بيانات دخول حسابك:</b>\n\n"
-            f"📧 الإيميل:  <code>{email}</code>\n"
-            f"🔑 الباسورد: <code>{password}</code>\n\n"
-        )
-        if features:
-            buyer_msg += f"⭐ المميزات: {features}\n\n"
-        buyer_msg += (
-            f"{_divider()}\n"
-            f"📞 للدعم: <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>\n\n"
-            "✨ <i>شكراً لثقتك بنا — استمتع بحسابك!</i>"
-        )
-
-        delivery_success = False
-        try:
-            await context.bot.send_message(
-                chat_id=order['buyer_id'],
-                text=buyer_msg,
-                parse_mode=ParseMode.HTML
-            )
-            delivery_success = True
-        except Exception as e:
-            logger.warning(f"Could not deliver credentials to buyer {order['buyer_id']}: {e}")
+        delivered = await _deliver_account(context.bot, order['buyer_id'], order)
 
         admin_confirm = (
             f"✅ <b>تم تأكيد الطلب #{order_id}</b>\n\n"
             f"📦 {order.get('account_name','—')}\n"
             f"👤 @{order.get('buyer_username','—')}\n"
-            f"{'📬 تم إرسال بيانات الدخول للمشتري ⚡' if delivery_success else '⚠️ فشل إرسال البيانات للمشتري — أرسلها يدوياً'}"
+            f"{'📬 تم إرسال بيانات الدخول للمشتري ⚡' if delivered else '⚠️ فشل إرسال البيانات للمشتري — أرسلها يدوياً'}"
         )
         await query.edit_message_text(admin_confirm, parse_mode=ParseMode.HTML, reply_markup=admin_keyboard())
         return

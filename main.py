@@ -28,11 +28,12 @@ async def _bot_main() -> None:
 
     from telegram.ext import (
         Application, CommandHandler, CallbackQueryHandler,
-        MessageHandler, filters
+        MessageHandler, PreCheckoutQueryHandler, filters
     )
     from bot_handlers import (
         cmd_start, cmd_help, cmd_shop, cmd_admin, cmd_cancel,
-        button_handler, message_handler, photo_handler
+        button_handler, message_handler, photo_handler,
+        pre_checkout_handler, successful_payment_handler
     )
 
     bot_app = Application.builder().token(BOT_TOKEN).build()
@@ -47,6 +48,15 @@ async def _bot_main() -> None:
     # Inline button presses
     bot_app.add_handler(CallbackQueryHandler(button_handler))
 
+    # ── Telegram Stars payment handlers ────────────────────
+    # Must answer pre-checkout within 10 seconds
+    bot_app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
+
+    # Fires after successful Stars payment — delivers account automatically
+    bot_app.add_handler(
+        MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler)
+    )
+
     # Photo uploads (admin flow)
     bot_app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
 
@@ -56,7 +66,9 @@ async def _bot_main() -> None:
     logger.info("🤖 Telegram bot polling started.")
     # Use async context manager to avoid signal-handler errors in non-main threads
     async with bot_app:
-        await bot_app.updater.start_polling(allowed_updates=["message", "callback_query"])
+        await bot_app.updater.start_polling(
+            allowed_updates=["message", "callback_query", "pre_checkout_query"]
+        )
         await bot_app.start()
         # Keep running until the process exits (daemon thread)
         import asyncio

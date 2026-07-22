@@ -923,10 +923,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
         except Exception as e:
             logger.error(f"Failed to send Stars invoice: {e}")
+            # Show actual error in message to help debug
             await _safe_reply(
                 query,
                 f"❌ <b>فشل إرسال فاتورة النجوم</b>\n\n"
-                f"تأكد أن البوت مفعّل للدفع بالنجوم من BotFather.\n\n"
+                f"<code>{e}</code>\n\n"
                 f"تواصل مع الأدمن: <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>",
                 parse_mode=ParseMode.HTML,
                 reply_markup=back_to_menu_keyboard()

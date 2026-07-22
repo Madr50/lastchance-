@@ -2,6 +2,7 @@
 import os
 import time
 import logging
+from typing import Optional
 from flask import Flask, request, jsonify, render_template, send_from_directory, session
 
 from flask_cors import CORS
@@ -272,7 +273,7 @@ def api_admin_upload():
 
 
 # ── Helpers ─────────────────────────────────────────────────
-def _image_url(path: str | None) -> str:
+def _image_url(path: Optional[str]) -> str:
     if not path:
         return ""
     return f"/static/images/accounts/{os.path.basename(path)}"
@@ -304,7 +305,7 @@ def _format_account(a: dict) -> dict:
     }
 
 
-def _save_upload(file_storage) -> str | None:
+def _save_upload(file_storage) -> Optional[str]:
     if not file_storage or file_storage.filename == "":
         return None
     if not allowed_file(file_storage.filename):

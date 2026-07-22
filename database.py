@@ -2,6 +2,7 @@
 import sqlite3
 import logging
 import threading
+from typing import Optional
 
 DB_NAME = "shop.db"
 logger  = logging.getLogger(__name__)
@@ -120,7 +121,7 @@ def get_all_accounts_admin() -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def get_account(account_id: int) -> dict | None:
+def get_account(account_id: int) -> Optional[dict]:
     conn = get_conn()
     row  = conn.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
     return dict(row) if row else None
@@ -164,7 +165,7 @@ def create_order(account_id: int, buyer_id: int, buyer_username: str) -> int:
     return c.lastrowid
 
 
-def get_order(order_id: int) -> dict | None:
+def get_order(order_id: int) -> Optional[dict]:
     conn = get_conn()
     row  = conn.execute("""
         SELECT o.*, a.name AS account_name, a.price AS account_price,

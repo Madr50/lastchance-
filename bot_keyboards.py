@@ -1,5 +1,6 @@
 # bot_keyboards.py — Premium keyboard layouts
 import os
+from typing import Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 
@@ -19,7 +20,7 @@ def shop_url(path: str = "") -> str:
     return base + path if base else ""
 
 
-def _webapp(path: str) -> WebAppInfo | None:
+def _webapp(path: str) -> Optional[WebAppInfo]:
     url = shop_url(path)
     return WebAppInfo(url=url) if url else None
 

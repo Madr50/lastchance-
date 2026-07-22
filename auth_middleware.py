@@ -5,6 +5,7 @@ import json
 import os
 import logging
 from functools import wraps
+from typing import Optional
 from urllib.parse import unquote
 from flask import request, jsonify, session
 
@@ -14,7 +15,7 @@ ADMIN_ID  = int(os.environ.get("ADMIN_ID", "8989271393"))
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 
 
-def verify_telegram_init_data(init_data: str) -> dict | None:
+def verify_telegram_init_data(init_data: str) -> Optional[dict]:
     """
     Validate Telegram WebApp initData HMAC and return the parsed user dict,
     or None if validation fails or token is missing.
@@ -49,7 +50,7 @@ def verify_telegram_init_data(init_data: str) -> dict | None:
         return None
 
 
-def get_user_from_request() -> dict | None:
+def get_user_from_request() -> Optional[dict]:
     """Extract and validate user from X-Init-Data header, form field, or query param."""
     init_data = (
         request.headers.get("X-Init-Data")

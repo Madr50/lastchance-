@@ -17,11 +17,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def run_bot() -> None:
-    import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
+async def _bot_main() -> None:
     from config import BOT_TOKEN
     if not BOT_TOKEN:
         logger.warning(
@@ -58,7 +54,23 @@ def run_bot() -> None:
     bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
     logger.info("🤖 Telegram bot polling started.")
-    bot_app.run_polling(allowed_updates=["message", "callback_query"])
+    # Use async context manager to avoid signal-handler errors in non-main threads
+    async with bot_app:
+        await bot_app.updater.start_polling(allowed_updates=["message", "callback_query"])
+        await bot_app.start()
+        # Keep running until the process exits (daemon thread)
+        import asyncio
+        await asyncio.Event().wait()
+
+
+def run_bot() -> None:
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_bot_main())
+    finally:
+        loop.close()
 
 
 if __name__ == "__main__":

@@ -141,12 +141,73 @@ def api_buy():
     update_account(acc_id, status="reserved")
     _notify_admin_async(order_id, account, buyer_id, buyer_username)
 
+    from config import USDT_ADDRESS
     return jsonify({
         "success":      True,
         "order_id":     order_id,
         "account_name": account["name"],
         "price":        account["price"],
+        "usdt_address": USDT_ADDRESS,
     })
+
+
+# ── Create Stars invoice link ────────────────────────────────
+@app.route("/api/create_invoice", methods=["POST"])
+def api_create_invoice():
+    import asyncio as _asyncio
+    from config import BOT_TOKEN
+
+    body       = request.get_json(silent=True) or {}
+    acc_id_raw = request.form.get("account_id") or body.get("account_id")
+    if not acc_id_raw:
+        return jsonify({"error": "account_id is required"}), 400
+    try:
+        acc_id = int(acc_id_raw)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid account_id"}), 400
+
+    account = get_account(acc_id)
+    if not account:
+        return jsonify({"error": "Account not found"}), 404
+    if account["status"] != "available":
+        return jsonify({"error": "Account is no longer available"}), 409
+
+    if not BOT_TOKEN:
+        return jsonify({"error": "Bot not configured"}), 503
+
+    buyer_id_raw = request.form.get("buyer_id") or body.get("buyer_id", "0")
+    try:
+        buyer_id = int(buyer_id_raw)
+    except (ValueError, TypeError):
+        buyer_id = 0
+
+    from bot_keyboards import usd_to_stars
+    from telegram import Bot, LabeledPrice
+
+    stars    = usd_to_stars(account["price"])
+    payload  = f"acc_{acc_id}_{buyer_id}"
+    year_info = f" — {account['creation_year']}" if account.get("creation_year") else ""
+
+    async def _create_link():
+        return await Bot(BOT_TOKEN).create_invoice_link(
+            title=f"🐦 {account['name']}{year_info}",
+            description=(
+                f"حساب تويتر/X قديم وأصيل\n"
+                f"السعر: ${account['price']:.2f} • {stars} نجمة\n"
+                f"تسليم فوري بعد الدفع ⚡"
+            ),
+            payload=payload,
+            provider_token="",
+            currency="XTR",
+            prices=[LabeledPrice(label=account["name"], amount=stars)],
+        )
+
+    try:
+        link = _asyncio.run(_create_link())
+        return jsonify({"success": True, "invoice_link": link, "stars": stars})
+    except Exception as exc:
+        logger.warning(f"create_invoice_link failed: {exc}")
+        return jsonify({"error": str(exc)}), 500
 
 
 # ── Admin API ───────────────────────────────────────────────
@@ -292,8 +353,8 @@ def _format_account_public(a: dict) -> dict:
         "category":      a["category"],
         "image":         _image_url(a["image_path"]),
         "status":        a["status"],
-        "followers":     a.get("followers", 0),
-        "tweets_count":  a.get("tweets_count", 0),
+        "followers":     a.get("followers") or 0,
+        "tweets_count":  a.get("tweets_count") or 0,
         "features":      a.get("features", ""),
         "created_at":    a["created_at"],
     }

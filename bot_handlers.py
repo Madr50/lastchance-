@@ -81,7 +81,7 @@ def _account_card(acc: dict, show_private: bool = False) -> str:
     feat_line = f"\n⭐ <b>المميزات:</b> {feat}\n" if feat else ""
 
     stats_line = ""
-    if int(acc.get('followers', 0)) or int(acc.get('tweets_count', 0)):
+    if int(acc.get('followers') or 0) or int(acc.get('tweets_count') or 0):
         stats_line = f"  👥  متابعون: <b>{flw}</b>   🐦  تغريدات: <b>{twts}</b>\n"
 
     private = ""

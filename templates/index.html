@@ -271,6 +271,22 @@
     .success-details { margin: 0 20px 20px; background: var(--surface2); border-radius: 12px; padding: 14px; text-align: right; font-size: 14px; line-height: 1.8; }
     .success-btn { margin: 0 20px; width: calc(100% - 40px); background: linear-gradient(135deg, var(--green), #22c55e); box-shadow: 0 4px 20px rgba(63,185,80,.3); }
 
+    /* Spin ring */
+    .spin-ring {
+      display: inline-block; width: 16px; height: 16px;
+      border: 2.5px solid rgba(255,255,255,.3); border-top-color: #fff;
+      border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Order ID badge */
+    .order-id-badge {
+      display: inline-block; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 4px 14px; font-size: 1rem; font-weight: 900;
+      color: var(--accent); letter-spacing: 1px;
+    }
+
     /* Toast */
     .toast {
       position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px);
@@ -408,6 +424,29 @@
   </div>
 </div>
 
+<!-- Payment Method Sheet -->
+<div id="paymentModal" class="sheet-overlay hidden" onclick="if(event.target===this)closePaymentModal()">
+  <div class="sheet">
+    <div class="sheet-handle" onclick="closePaymentModal()"></div>
+    <div class="sheet-body" style="padding-bottom:32px">
+      <h2 style="font-size:19px;font-weight:900;margin-bottom:8px;text-align:center">💳 اختر طريقة الدفع</h2>
+      <div id="paymentAccInfo" style="text-align:center;color:var(--muted);font-size:13px;margin-bottom:22px;line-height:1.6"></div>
+
+      <button id="starsPayBtn" class="buy-btn" style="margin-bottom:8px;background:linear-gradient(135deg,#f5a623,#e8731a);box-shadow:0 4px 20px rgba(245,166,35,.35)">
+        <span class="buy-btn-inner" id="starsPayInner">⭐  ادفع بنجوم تيليجرام</span>
+      </button>
+      <div id="paymentStarsHint" style="text-align:center;font-size:11px;color:var(--muted);margin-bottom:18px"></div>
+
+      <button id="usdtPayBtn" class="buy-btn" style="background:linear-gradient(135deg,#26a17b,#1a7a5e);box-shadow:0 4px 20px rgba(38,161,123,.3)">
+        <span class="buy-btn-inner" id="usdtPayInner">💎  ادفع بـ USDT TRC20</span>
+      </button>
+      <div id="paymentUsdtHint" style="text-align:center;font-size:11px;color:var(--muted);margin-top:6px"></div>
+
+      <button onclick="closePaymentModal()" style="width:100%;margin-top:18px;padding:10px;background:none;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:inherit;font-size:14px;cursor:pointer">إلغاء</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
@@ -475,7 +514,7 @@ function render() {
         <div class="card-name">${a.name}</div>
         ${year}
         ${followers}
-        <div class="card-price">$${parseFloat(a.price).toFixed(0)}</div>
+        <div class="card-price">$${parseFloat(a.price).toFixed(2)}</div>
       </div>
     </div>`;
   }).join('');
@@ -536,34 +575,114 @@ function closeSuccess() {
   document.getElementById('successModal').classList.add('hidden');
 }
 
-document.getElementById('modalBuyBtn').onclick = async function() {
-  if (!currentAcc) return;
-  this.disabled = true;
-  this.innerHTML = '<span class="buy-btn-inner">⏳ جاري الطلب…</span>';
+document.getElementById('modalBuyBtn').onclick = function() {
+  if (!currentAcc || currentAcc.status !== 'available') return;
+  closeModal();
+  showPaymentModal(currentAcc.id);
+};
 
+// ── Payment Method Modal ───────────────────────────────────
+let paymentAccId = null;
+
+function showPaymentModal(accId) {
+  paymentAccId = accId;
+  const acc = allAccounts.find(a => a.id === accId);
+  if (!acc) return;
+  const stars = Math.max(1, Math.round(parseFloat(acc.price) * 50));
+  document.getElementById('paymentAccInfo').innerHTML =
+    `📦 <strong>${acc.name}</strong><br>💰 السعر: <strong>$${parseFloat(acc.price).toFixed(2)}</strong>`;
+  document.getElementById('paymentStarsHint').textContent = `⭐ ${stars} نجمة — تسليم فوري تلقائي`;
+  document.getElementById('paymentUsdtHint').textContent  = `💵 $${parseFloat(acc.price).toFixed(2)} USDT — تسليم بعد تأكيد الأدمن`;
+  document.getElementById('starsPayBtn').disabled = false;
+  document.getElementById('starsPayInner').textContent = '⭐  ادفع بنجوم تيليجرام';
+  document.getElementById('usdtPayBtn').disabled = false;
+  document.getElementById('usdtPayInner').textContent = '💎  ادفع بـ USDT TRC20';
+  document.getElementById('paymentModal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closePaymentModal() {
+  document.getElementById('paymentModal').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+document.getElementById('starsPayBtn').onclick = async function() {
+  const accId = paymentAccId;
+  const btn   = this;
+  const inner = document.getElementById('starsPayInner');
+  btn.disabled = true;
+  inner.innerHTML = '<span class="spin-ring"></span> جاري الإنشاء…';
   try {
     const fd = new FormData();
-    fd.append('account_id', currentAcc.id);
+    fd.append('account_id', accId);
+    fd.append('buyer_id',   tg?.initDataUnsafe?.user?.id || 0);
     if (tg?.initData) fd.append('initData', tg.initData);
-
-    const r = await fetch('/api/buy', { method: 'POST', body: fd });
-    const d = await r.json();
-
-    if (d.success) {
-      closeModal();
-      document.getElementById('successDetails').innerHTML =
-        `<strong>رقم طلبك: #${d.order_id}</strong><br>الحساب: ${d.account_name}<br>المبلغ: $${parseFloat(d.price).toFixed(2)}<br><br>تواصل مع <strong>@{{ admin_username }}</strong> مع رقم طلبك لإتمام الدفع ⚡`;
-      document.getElementById('successModal').classList.remove('hidden');
-      allAccounts = allAccounts.filter(a => a.id !== currentAcc.id);
-      render();
-    } else {
-      showToast(d.error || 'حدث خطأ');
-    }
+    const res  = await fetch('/api/create_invoice', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok || !data.invoice_link) throw new Error(data.error || 'فشل إنشاء الفاتورة');
+    closePaymentModal();
+    tg.openInvoice(data.invoice_link, (status) => {
+      if (status === 'paid') {
+        allAccounts = allAccounts.filter(a => a.id !== accId);
+        render();
+        document.getElementById('successDetails').innerHTML = `
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:.75rem;color:var(--muted);margin-bottom:4px">✅ تم الدفع بالنجوم</div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:12px;font-size:.85rem;color:var(--muted)">
+            ستصلك بيانات الحساب من البوت فوراً ⚡
+          </div>`;
+        document.getElementById('successModal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+      } else if (status !== 'pending') {
+        showToast('❌ تم إلغاء الدفع');
+      }
+    });
   } catch(e) {
-    showToast('فشل إرسال الطلب، حاول مجدداً');
-  } finally {
-    this.disabled = false;
-    this.innerHTML = '<span class="buy-btn-inner"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>اشتري الآن</span>';
+    showToast('❌ ' + e.message);
+    btn.disabled = false;
+    inner.textContent = '⭐  ادفع بنجوم تيليجرام';
+  }
+};
+
+document.getElementById('usdtPayBtn').onclick = async function() {
+  const accId = paymentAccId;
+  const btn   = this;
+  const inner = document.getElementById('usdtPayInner');
+  btn.disabled = true;
+  inner.innerHTML = '<span class="spin-ring"></span> جاري الطلب…';
+  try {
+    const fd = new FormData();
+    fd.append('account_id', accId);
+    if (tg?.initData) fd.append('initData', tg.initData);
+    const res  = await fetch('/api/buy', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'فشل الطلب');
+    closePaymentModal();
+    allAccounts = allAccounts.filter(a => a.id !== accId);
+    render();
+    document.getElementById('successDetails').innerHTML = `
+      <div style="text-align:center;margin-bottom:12px">
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:4px">ORDER ID</div>
+        <div class="order-id-badge">#${data.order_id}</div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:8px;font-size:.85rem">
+        <div>الحساب: <strong>${data.account_name}</strong></div>
+        <div>المبلغ: <strong>$${parseFloat(data.price).toFixed(2)} USDT</strong></div>
+        ${data.usdt_address ? `<div style="background:var(--surface2);border-radius:8px;padding:10px">
+          <div style="font-size:.7rem;color:var(--muted);margin-bottom:4px">📋 عنوان المحفظة (TRC20)</div>
+          <div style="font-family:monospace;font-size:11px;word-break:break-all;color:var(--accent)">${data.usdt_address}</div>
+        </div>` : ''}
+        <div style="font-size:.72rem;color:var(--muted)">
+          أرسل الإيصال لـ <strong style="color:var(--text)">@{{ admin_username }}</strong> مع رقم طلبك <strong>#${data.order_id}</strong>
+        </div>
+      </div>`;
+    document.getElementById('successModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  } catch(e) {
+    showToast('❌ ' + e.message);
+    btn.disabled = false;
+    inner.textContent = '💎  ادفع بـ USDT TRC20';
   }
 };
 

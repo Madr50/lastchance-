@@ -3,6 +3,13 @@ import logging
 import os
 import threading
 
+# Load .env file if present (for local/EC2 deployments)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",

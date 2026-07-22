@@ -950,22 +950,37 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return
 
         buyer_username = user.username or "unknown"
-        order_id       = create_order(acc_id, user.id, buyer_username)
+        buyer_id       = user.id
+        order_id       = create_order(acc_id, buyer_id, buyer_username)
         update_account(acc_id, status='reserved')
 
-        # Notify admin privately
+        # ── Notify admin privately ──────────────────────────────
+        # NOTE: If admin == buyer (same Telegram account = testing mode),
+        # this message appears in the SAME chat as the user messages.
+        # The "✅ تأكيد الدفع" button is ADMIN-ONLY. Real customers never
+        # see it because their chat with the bot is separate from the admin's.
+        is_testing = (buyer_id == ADMIN_ID)
+        admin_note = (
+            f"\n\n{'━' * 24}\n"
+            f"⚠️ <b>وضع الاختبار:</b> أنت الأدمن والمشتري في نفس الوقت.\n"
+            f"لا تضغط تأكيد الدفع إلا بعد التحقق الفعلي من وصول USDT."
+            if is_testing else ""
+        )
+
         try:
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=(
+                    f"🔐 <b>━━━ رسالة إدارية — للأدمن فقط ━━━</b>\n\n"
                     f"💎 <b>طلب شراء بـ USDT جديد!</b>\n"
                     f"{_divider()}\n\n"
                     f"🆔 رقم الطلب: <code>#{order_id}</code>\n"
                     f"📦 الحساب:   <b>{account['name']}</b>\n"
                     f"💰 السعر:    <b>${account['price']:.2f} USDT</b>\n"
                     f"👤 المشتري:  @{buyer_username}\n"
-                    f"🆔 ID:       <code>{user.id}</code>\n\n"
-                    "⬇️ اضغط للتأكيد بعد التحقق من الدفع"
+                    f"🆔 ID:       <code>{buyer_id}</code>\n\n"
+                    f"⬇️ <b>اضغط تأكيد الدفع فقط بعد التحقق من وصول USDT الفعلي</b>"
+                    f"{admin_note}"
                 ),
                 parse_mode=ParseMode.HTML,
                 reply_markup=admin_order_keyboard(order_id, acc_id)
@@ -973,6 +988,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Exception as e:
             logger.warning(f"Could not notify admin: {e}")
 
+        # ── Send USDT payment instructions to user ──────────────
         success_text = (
             f"💎 <b>طلب USDT مسجّل!</b>\n"
             f"{_divider()}\n\n"
@@ -987,7 +1003,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"📸 <b>بعد الإرسال:</b>\n"
             f"أرسل صورة الإيصال لـ <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>\n"
             f"مع رقم طلبك: <code>#{order_id}</code>\n\n"
-            "⚡ <i>تسليم بيانات الحساب فور تأكيد الأدمن</i>"
+            "⚡ <i>تسليم بيانات الحساب فور تأكيد الأدمن للدفع</i>"
         )
         await _safe_reply(query, success_text, parse_mode=ParseMode.HTML, reply_markup=back_to_menu_keyboard())
         return

@@ -72,13 +72,18 @@ def _fmt_num(n) -> str:
     return str(n)
 
 def _account_card(acc: dict, show_private: bool = False) -> str:
-    year  = f"  📅  سنة الإنشاء: <b>{acc['creation_year']}</b>\n" if acc.get('creation_year') else ""
-    desc  = (acc.get('description') or '')[:300]
-    feat  = acc.get('features') or ''
-    flw   = _fmt_num(acc.get('followers', 0))
-    twts  = _fmt_num(acc.get('tweets_count', 0))
+    import html as _html
+    # Escape all user-supplied text — prevents Telegram HTML parse errors
+    # (e.g. descriptions containing <a:emoji_id:...> or any < > & characters)
+    safe_name = _html.escape(acc.get('name') or '')
+    safe_desc = _html.escape((acc.get('description') or '')[:300])
+    safe_feat = _html.escape(acc.get('features') or '')
 
-    feat_line = f"\n⭐ <b>المميزات:</b> {feat}\n" if feat else ""
+    year  = f"  📅  سنة الإنشاء: <b>{acc['creation_year']}</b>\n" if acc.get('creation_year') else ""
+    flw   = _fmt_num(acc.get('followers') or 0)
+    twts  = _fmt_num(acc.get('tweets_count') or 0)
+
+    feat_line = f"\n⭐ <b>المميزات:</b> {safe_feat}\n" if safe_feat else ""
 
     stats_line = ""
     if int(acc.get('followers') or 0) or int(acc.get('tweets_count') or 0):
@@ -86,8 +91,8 @@ def _account_card(acc: dict, show_private: bool = False) -> str:
 
     private = ""
     if show_private:
-        email = acc.get('email') or '—'
-        pw    = acc.get('password') or '—'
+        email = _html.escape(acc.get('email') or '—')
+        pw    = _html.escape(acc.get('password') or '—')
         private = (
             f"\n{_divider()}\n"
             f"🔐 <b>بيانات الدخول (خاص — أدمن فقط):</b>\n"
@@ -96,14 +101,14 @@ def _account_card(acc: dict, show_private: bool = False) -> str:
         )
 
     return (
-        f"🐦 <b>{acc['name']}</b>\n"
+        f"🐦 <b>{safe_name}</b>\n"
         f"{_divider()}\n"
         f"{year}"
         f"{stats_line}"
         f"  💰  السعر: <b>${acc['price']:.2f}</b>\n"
         f"  {_status_label(acc['status'])}\n"
         f"{feat_line}"
-        f"\n📋 {desc}{private}"
+        f"\n📋 {safe_desc}{private}"
     )
 
 def _build_stats_text(stats: dict) -> str:

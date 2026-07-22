@@ -762,6 +762,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Exception as e:
             logger.warning(f"Could not notify admin: {e}")
 
+        from config import USDT_ADDRESS
         success_text = (
             f"✅ <b>تم تسجيل طلبك بنجاح!</b>\n"
             f"{_divider()}\n\n"
@@ -769,9 +770,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"📦 الحساب:   <b>{account['name']}</b>\n"
             f"💰 المبلغ:   <b>${account['price']:.2f}</b>\n\n"
             f"{_divider()}\n"
-            f"📞 <b>الخطوة التالية:</b>\n"
-            f"تواصل مع الأدمن وأرسل له رقم طلبك:\n"
-            f"   <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>\n\n"
+            f"💳 <b>ادفع المبلغ على هذا العنوان:</b>\n\n"
+            f"🔸 <b>USDT TRC20</b>\n"
+            f"<code>{USDT_ADDRESS}</code>\n\n"
+            f"💵 المبلغ المطلوب: <b>${account['price']:.2f} USDT</b>\n\n"
+            f"{_divider()}\n"
+            f"📸 <b>بعد الدفع أرسل صورة الإيصال لـ:</b>\n"
+            f"   <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>\n"
+            f"   مع رقم طلبك: <code>#{order_id}</code>\n\n"
             f"⚡ بعد تأكيد الدفع ستصلك بيانات الحساب <b>فوراً</b>"
         )
         await query.edit_message_text(

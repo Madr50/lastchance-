@@ -11,4 +11,7 @@ ACCOUNTS_DIR   = "static/images/accounts"
 # Admin panel password (browser login). Set ADMIN_PASSWORD env var to secure it.
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin1234")
 
+# عنوان USDT TRC20 لاستقبال المدفوعات
+USDT_ADDRESS = os.environ.get("USDT_ADDRESS", "TJmRUQ7qhLR22E15Q8egyRyJaFFJxERMxy")
+
 os.makedirs(ACCOUNTS_DIR, exist_ok=True)

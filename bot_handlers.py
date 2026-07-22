@@ -908,6 +908,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     f"تسليم فوري بعد الدفع ⚡"
                 ),
                 payload=payload,
+                provider_token="",  # Must be empty string for Telegram Stars (XTR)
                 currency="XTR",
                 prices=[LabeledPrice(label=account['name'], amount=stars)],
             )

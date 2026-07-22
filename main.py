@@ -66,10 +66,14 @@ async def _bot_main() -> None:
     logger.info("🤖 Telegram bot polling started.")
     # Use async context manager to avoid signal-handler errors in non-main threads
     async with bot_app:
+        # IMPORTANT: start() must come BEFORE start_polling()
+        # start() activates the update processor (dispatches handlers).
+        # start_polling() fetches updates from Telegram.
+        # Wrong order = updates queue up but never get dispatched → Stars pre_checkout silently dropped.
+        await bot_app.start()
         await bot_app.updater.start_polling(
             allowed_updates=["message", "callback_query", "pre_checkout_query"]
         )
-        await bot_app.start()
         # Keep running until the process exits (daemon thread)
         import asyncio
         await asyncio.Event().wait()

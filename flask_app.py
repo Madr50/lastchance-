@@ -11,7 +11,8 @@ from auth_middleware import admin_required, is_session_admin, get_user_from_requ
 from database import (
     get_all_accounts, get_all_accounts_admin, get_account,
     add_account, update_account, delete_account,
-    get_all_orders, update_order, get_stats
+    get_all_orders, get_pending_orders, update_order, get_stats,
+    create_order, get_order
 )
 from config import ADMIN_ID, ADMIN_PASSWORD
 
@@ -23,7 +24,7 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "change-me-in-prod-123!")
 app.config["UPLOAD_FOLDER"]      = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024   # 16 MB
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 CORS(app)
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -33,14 +34,14 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-# ── Health check ───────────────────────────────────────
+# ── Health ──────────────────────────────────────────────────
 @app.route("/health")
 @app.route("/ping")
 def health():
     return jsonify({"status": "ok"}), 200
 
 
-# ── Page routes ────────────────────────────────────────
+# ── Pages ───────────────────────────────────────────────────
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -51,7 +52,7 @@ def admin():
     return render_template("admin.html")
 
 
-# ── Browser Auth ───────────────────────────────────────
+# ── Auth ────────────────────────────────────────────────────
 @app.route("/api/admin/login", methods=["POST"])
 def api_admin_login():
     data     = request.get_json(silent=True) or {}
@@ -71,7 +72,6 @@ def api_admin_logout():
 
 @app.route("/api/admin/check", methods=["GET"])
 def api_admin_check():
-    """Returns 200 if already authed (session or Telegram), 403 otherwise."""
     if is_session_admin():
         return jsonify({"authed": True, "via": "session"})
     user = get_user_from_request()
@@ -80,7 +80,7 @@ def api_admin_check():
     return jsonify({"authed": False}), 403
 
 
-# ── Public API ─────────────────────────────────────────
+# ── Public API ──────────────────────────────────────────────
 @app.route("/api/accounts", methods=["GET"])
 def api_get_accounts():
     accounts = get_all_accounts(status="available")
@@ -95,10 +95,14 @@ def api_get_account(account_id):
     return jsonify(_format_account_public(a))
 
 
-# ── Public buy ─────────────────────────────────────────
+@app.route("/api/stats", methods=["GET"])
+def api_stats():
+    return jsonify(get_stats())
+
+
+# ── Public buy ──────────────────────────────────────────────
 @app.route("/api/buy", methods=["POST"])
 def api_buy():
-    from database import create_order
     import json as _json
     from urllib.parse import unquote
 
@@ -141,7 +145,7 @@ def api_buy():
     })
 
 
-# ── Admin API ──────────────────────────────────────────
+# ── Admin API ───────────────────────────────────────────────
 @app.route("/api/admin/accounts", methods=["GET"])
 @admin_required
 def api_admin_get_accounts():
@@ -165,8 +169,16 @@ def api_admin_create_account():
     creation_year = int(raw_year) if raw_year and raw_year.isdigit() else None
     category      = request.form.get("category", "twitter")
     image_path    = _save_upload(request.files.get("image"))
+    email         = request.form.get("email", "")
+    password      = request.form.get("password", "")
+    followers     = int(request.form.get("followers", 0) or 0)
+    tweets_count  = int(request.form.get("tweets_count", 0) or 0)
+    features      = request.form.get("features", "")
 
-    account_id = add_account(name, description, price, creation_year, category, image_path)
+    account_id = add_account(
+        name, description, price, creation_year, category, image_path,
+        email, password, followers, tweets_count, features
+    )
     return jsonify({"success": True, "id": account_id}), 201
 
 
@@ -177,7 +189,7 @@ def api_admin_update_account(account_id):
         return jsonify({"error": "Not found"}), 404
 
     updates = {}
-    for field in ["name", "description", "status", "category"]:
+    for field in ["name", "description", "status", "category", "email", "password", "features"]:
         if field in request.form:
             updates[field] = request.form[field]
     if "price" in request.form:
@@ -185,6 +197,12 @@ def api_admin_update_account(account_id):
             updates["price"] = float(request.form["price"])
         except (ValueError, TypeError):
             return jsonify({"error": "السعر غير صحيح"}), 400
+    for num_field in ["followers", "tweets_count"]:
+        if num_field in request.form:
+            try:
+                updates[num_field] = int(request.form[num_field])
+            except (ValueError, TypeError):
+                pass
     raw_year = request.form.get("creation_year", "")
     if raw_year and raw_year.isdigit():
         updates["creation_year"] = int(raw_year)
@@ -226,7 +244,21 @@ def api_admin_update_order(order_id):
     allowed = {"pending", "paid", "completed", "cancelled"}
     if status not in allowed:
         return jsonify({"error": f"الحالات المتاحة: {sorted(allowed)}"}), 400
+
+    order = get_order(order_id)
+    if not order:
+        return jsonify({"error": "الطلب غير موجود"}), 404
+
     update_order(order_id, status)
+
+    # If completed, mark account sold and send credentials to buyer
+    if status == "completed":
+        update_account(order["account_id"], status="sold")
+        _send_credentials_async(order)
+    # If cancelled/rejected, restore account to available for resale
+    elif status == "cancelled":
+        update_account(order["account_id"], status="available")
+
     return jsonify({"success": True})
 
 
@@ -239,7 +271,7 @@ def api_admin_upload():
     return jsonify({"success": True, "path": img, "url": _image_url(img)})
 
 
-# ── Helpers ────────────────────────────────────────────
+# ── Helpers ─────────────────────────────────────────────────
 def _image_url(path: str | None) -> str:
     if not path:
         return ""
@@ -256,12 +288,20 @@ def _format_account_public(a: dict) -> dict:
         "category":      a["category"],
         "image":         _image_url(a["image_path"]),
         "status":        a["status"],
+        "followers":     a.get("followers", 0),
+        "tweets_count":  a.get("tweets_count", 0),
+        "features":      a.get("features", ""),
         "created_at":    a["created_at"],
     }
 
 
 def _format_account(a: dict) -> dict:
-    return {**_format_account_public(a), "updated_at": a["updated_at"]}
+    return {
+        **_format_account_public(a),
+        "email":      a.get("email", ""),
+        "password":   a.get("password", ""),
+        "updated_at": a["updated_at"],
+    }
 
 
 def _save_upload(file_storage) -> str | None:
@@ -278,14 +318,18 @@ def _save_upload(file_storage) -> str | None:
 
 def _notify_admin_async(order_id, account, buyer_id, buyer_username) -> None:
     import threading, asyncio
-    from config import BOT_TOKEN, ADMIN_ID
+    from config import BOT_TOKEN, ADMIN_ID, ADMIN_USERNAME
 
     if not BOT_TOKEN:
         return
 
     def _run():
         try:
-            from telegram import Bot
+            from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+            kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ تأكيد الدفع", callback_data=f"admin_confirm_order_{order_id}"),
+                InlineKeyboardButton("❌ رفض",         callback_data=f"admin_reject_order_{order_id}"),
+            ]])
             msg = (
                 f"🆕 <b>طلب جديد #{order_id}</b>\n\n"
                 f"📦 {account['name']}\n"
@@ -293,9 +337,51 @@ def _notify_admin_async(order_id, account, buyer_id, buyer_username) -> None:
                 f"👤 @{buyer_username} (ID: <code>{buyer_id}</code>)"
             )
             asyncio.run(Bot(BOT_TOKEN).send_message(
-                chat_id=ADMIN_ID, text=msg, parse_mode="HTML"
+                chat_id=ADMIN_ID, text=msg, parse_mode="HTML",
+                reply_markup=kb
             ))
         except Exception as exc:
             logger.warning(f"Admin notification failed: {exc}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def _send_credentials_async(order: dict) -> None:
+    import threading, asyncio
+    from config import BOT_TOKEN, ADMIN_USERNAME
+
+    if not BOT_TOKEN or not order.get("buyer_id"):
+        return
+
+    def _run():
+        try:
+            from telegram import Bot
+            from database import get_account as _get_account
+            acc = _get_account(order["account_id"])
+            if not acc:
+                return
+            email    = acc.get("email") or "—"
+            password = acc.get("password") or "—"
+            features = acc.get("features") or ""
+            msg = (
+                f"🎉 <b>مبروك! تم تأكيد دفعك</b>\n\n"
+                f"📦 الحساب: <b>{acc['name']}</b>\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🔐 <b>بيانات دخول حسابك:</b>\n\n"
+                f"📧 الإيميل:  <code>{email}</code>\n"
+                f"🔑 الباسورد: <code>{password}</code>\n\n"
+            )
+            if features:
+                msg += f"⭐ المميزات: {features}\n\n"
+            msg += (
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"📞 للدعم: <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>\n\n"
+                "✨ <i>شكراً لثقتك بنا!</i>"
+            )
+            asyncio.run(Bot(BOT_TOKEN).send_message(
+                chat_id=order["buyer_id"], text=msg, parse_mode="HTML"
+            ))
+        except Exception as exc:
+            logger.warning(f"Credentials delivery failed: {exc}")
 
     threading.Thread(target=_run, daemon=True).start()

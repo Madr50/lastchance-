@@ -3,50 +3,323 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-  <title>𝕏 Account Shop</title>
+  <title>𝕏 Twitter Account Shop</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="/static/css/shop.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --accent: #1d9bf0;
+      --accent2: #8b5cf6;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --text: #e6edf3;
+      --muted: #7d8590;
+      --card-bg: #161b22;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Cairo', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated background */
+    .bg-orbs { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.12;
+      animation: float 8s ease-in-out infinite;
+    }
+    .orb-1 { width: 400px; height: 400px; background: var(--accent); top: -100px; right: -100px; animation-delay: 0s; }
+    .orb-2 { width: 300px; height: 300px; background: var(--accent2); bottom: 100px; left: -80px; animation-delay: -3s; }
+    .orb-3 { width: 200px; height: 200px; background: var(--green); top: 50%; left: 50%; animation-delay: -6s; }
+    @keyframes float { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-30px) scale(1.05)} }
+
+    /* Header */
+    .header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13,17,23,0.92);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+    }
+    .header-inner { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 900; color: #fff;
+    }
+    .logo-title { font-size: 15px; font-weight: 800; color: var(--text); display: block; }
+    .logo-sub { font-size: 11px; color: var(--muted); display: block; }
+    .search-toggle {
+      width: 36px; height: 36px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; cursor: pointer; color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
+      transition: all .2s;
+    }
+    .search-toggle:hover { background: var(--border); color: var(--text); }
+    .search-bar {
+      padding: 0 0 10px;
+      display: none;
+    }
+    .search-bar.open { display: block; }
+    .search-inner {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 0 12px;
+    }
+    .search-inner input {
+      flex: 1; background: none; border: none; outline: none;
+      color: var(--text); font-family: inherit; font-size: 14px;
+      height: 38px; direction: rtl;
+    }
+    .search-inner input::placeholder { color: var(--muted); }
+    .search-clear { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; }
+    .search-clear.hidden { display: none; }
+
+    /* Filter pills */
+    .filter-bar { padding: 12px 16px; position: relative; z-index: 1; }
+    .filter-track { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+    .filter-track::-webkit-scrollbar { display: none; }
+    .pill {
+      display: flex; align-items: center; gap: 5px;
+      padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--muted); cursor: pointer; white-space: nowrap;
+      transition: all .2s; font-family: inherit;
+    }
+    .pill:hover, .pill.active {
+      background: var(--accent); border-color: var(--accent);
+      color: #fff;
+    }
+    .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex; gap: 12px; padding: 0 16px 12px;
+      position: relative; z-index: 1;
+    }
+    .stat-chip {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 8px;
+      background: var(--surface); border: 1px solid var(--border);
+      font-size: 12px; color: var(--muted);
+    }
+    .stat-chip strong { color: var(--text); }
+
+    /* Grid */
+    .main { padding: 0 12px 100px; position: relative; z-index: 1; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* Account cards */
+    .account-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 16px; overflow: hidden; cursor: pointer;
+      transition: transform .2s, border-color .2s, box-shadow .2s;
+      position: relative;
+    }
+    .account-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--accent);
+      box-shadow: 0 8px 30px rgba(29,155,240,.15);
+    }
+    .account-card:active { transform: scale(0.97); }
+    .card-img {
+      width: 100%; aspect-ratio: 1/1; object-fit: cover;
+      background: var(--surface2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 40px;
+    }
+    .card-img img { width: 100%; height: 100%; object-fit: cover; }
+    .card-img.no-img {
+      background: linear-gradient(135deg, #161b22, #21262d);
+      aspect-ratio: 1/1;
+    }
+    .card-body { padding: 10px; }
+    .card-name { font-size: 13px; font-weight: 800; color: var(--text); margin-bottom: 4px; line-height: 1.3; }
+    .card-year { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+    .card-price { font-size: 16px; font-weight: 900; color: var(--accent); }
+    .card-badge {
+      position: absolute; top: 8px; left: 8px;
+      background: var(--accent); color: #fff;
+      font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 6px;
+    }
+    .card-followers { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+    /* Skeletons */
+    .skeleton-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+    .sk-img { width: 100%; aspect-ratio: 1/1; background: var(--surface2); }
+    .sk-body { padding: 10px; }
+    .sk-line { height: 10px; border-radius: 6px; background: var(--surface2); margin-bottom: 7px; animation: shimmer 1.5s infinite; }
+    .sk-w60 { width: 60%; }
+    .sk-w40 { width: 40%; }
+    .sk-w80 { width: 80%; }
+    .sk-price { height: 16px; width: 50%; }
+    @keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+    /* Empty */
+    .empty { text-align: center; padding: 60px 20px; }
+    .empty-glyph { font-size: 60px; margin-bottom: 16px; opacity: .3; }
+    .empty h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .empty p { color: var(--muted); font-size: 14px; }
+    .hidden { display: none !important; }
+
+    /* Bottom sheet / modal */
+    .sheet-overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.7);
+      display: flex; align-items: flex-end;
+      animation: fadeIn .2s;
+    }
+    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+    .sheet {
+      width: 100%; max-height: 92vh; overflow-y: auto;
+      background: var(--surface);
+      border-radius: 20px 20px 0 0;
+      animation: slideUp .3s cubic-bezier(.2,1,.3,1);
+    }
+    @keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+    .sheet-handle {
+      width: 36px; height: 4px; background: var(--border);
+      border-radius: 2px; margin: 12px auto;
+    }
+    .sheet-hero {
+      width: 100%; max-height: 260px; overflow: hidden;
+      background: var(--surface2);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .sheet-hero img { width: 100%; object-fit: cover; }
+    .sheet-hero-placeholder { font-size: 80px; padding: 20px; }
+    .sheet-body { padding: 20px; }
+    .sheet-meta { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .meta-badge {
+      padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+      background: rgba(29,155,240,.15); color: var(--accent); border: 1px solid rgba(29,155,240,.3);
+    }
+    .meta-badge.purple { background: rgba(139,92,246,.15); color: var(--accent2); border-color: rgba(139,92,246,.3); }
+    .meta-badge.green { background: rgba(63,185,80,.15); color: var(--green); border-color: rgba(63,185,80,.3); }
+    .sheet-name { font-size: 22px; font-weight: 900; margin-bottom: 8px; }
+    .sheet-desc { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 16px; }
+    .sheet-features {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 14px; margin-bottom: 16px;
+    }
+    .sheet-features h4 { font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+    .features-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .feature-tag {
+      padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      background: rgba(29,155,240,.1); color: var(--accent); border: 1px solid rgba(29,155,240,.2);
+    }
+    .sheet-stats { display: flex; gap: 12px; margin-bottom: 16px; }
+    .stat-box {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px; text-align: center;
+    }
+    .stat-box-val { font-size: 18px; font-weight: 900; color: var(--text); }
+    .stat-box-lbl { font-size: 10px; color: var(--muted); margin-top: 2px; font-weight: 600; }
+    .sheet-price-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .sheet-price { font-size: 32px; font-weight: 900; color: var(--accent); }
+    .sheet-price-sub { font-size: 12px; color: var(--muted); }
+    .trust-icons { display: flex; gap: 6px; font-size: 20px; }
+
+    .buy-btn {
+      width: 100%; padding: 16px; border: none; border-radius: 14px; cursor: pointer;
+      font-family: inherit; font-size: 16px; font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), #0ea5e9);
+      color: #fff; position: relative; overflow: hidden;
+      transition: transform .15s, box-shadow .15s;
+      box-shadow: 0 4px 20px rgba(29,155,240,.4);
+    }
+    .buy-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 25px rgba(29,155,240,.5); }
+    .buy-btn:active { transform: scale(0.98); }
+    .buy-btn-inner { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .sheet-note {
+      display: flex; align-items: flex-start; gap: 6px;
+      margin-top: 12px; padding: 10px 12px;
+      background: rgba(210,153,34,.08); border: 1px solid rgba(210,153,34,.2);
+      border-radius: 10px; font-size: 12px; color: var(--muted);
+    }
+
+    /* Success modal */
+    .success-sheet { text-align: center; padding-bottom: 30px; }
+    .success-anim { position: relative; width: 90px; height: 90px; margin: 20px auto; }
+    .success-ring {
+      position: absolute; inset: 0; border-radius: 50%;
+      border: 3px solid var(--accent);
+      animation: pulse-ring 1s ease-out forwards;
+    }
+    @keyframes pulse-ring { 0%{transform:scale(.8);opacity:1} 100%{transform:scale(1.3);opacity:0} }
+    .success-check { width: 90px; height: 90px; }
+    .check-circle { stroke: url(#grad); stroke-width: 2; stroke-dasharray: 166; stroke-dashoffset: 166; animation: draw 0.5s ease forwards 0.1s; }
+    .check-tick { stroke: url(#grad); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 48; stroke-dashoffset: 48; animation: draw 0.4s ease forwards 0.6s; }
+    @keyframes draw { to{stroke-dashoffset:0} }
+    .success-title { font-size: 22px; font-weight: 900; margin-bottom: 12px; }
+    .success-details { margin: 0 20px 20px; background: var(--surface2); border-radius: 12px; padding: 14px; text-align: right; font-size: 14px; line-height: 1.8; }
+    .success-btn { margin: 0 20px; width: calc(100% - 40px); background: linear-gradient(135deg, var(--green), #22c55e); box-shadow: 0 4px 20px rgba(63,185,80,.3); }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px);
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 10px 18px;
+      font-size: 13px; font-weight: 600; color: var(--text);
+      z-index: 300; transition: transform .3s cubic-bezier(.2,1,.3,1), opacity .3s;
+      opacity: 0; white-space: nowrap;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  </style>
 </head>
 <body>
 
-<!-- Ambient background orbs -->
 <div class="bg-orbs" aria-hidden="true">
   <div class="orb orb-1"></div>
   <div class="orb orb-2"></div>
   <div class="orb orb-3"></div>
 </div>
 
-<!-- ── Header ─────────────────────────────────────── -->
 <header class="header">
   <div class="header-inner">
     <div class="logo">
       <div class="logo-icon">𝕏</div>
-      <div class="logo-text">
-        <span class="logo-title">Account Shop</span>
-        <span class="logo-sub">حسابات تويتر/X القديمة</span>
+      <div>
+        <span class="logo-title">Twitter X Shop</span>
+        <span class="logo-sub">حسابات أصيلة وقديمة</span>
       </div>
     </div>
-    <button class="search-toggle" id="searchToggle" aria-label="Search">
+    <button class="search-toggle" id="searchToggle">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     </button>
   </div>
   <div class="search-bar" id="searchBar">
     <div class="search-inner">
-      <svg class="search-icon-sm" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      <input id="searchInput" type="text" placeholder="ابحث عن حسابات…" autocomplete="off" autocorrect="off"/>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="searchInput" type="text" placeholder="ابحث عن حسابات…" autocomplete="off"/>
       <button id="searchClear" class="search-clear hidden">✕</button>
     </div>
   </div>
 </header>
 
-<!-- ── Filter Pills ───────────────────────────────── -->
 <div class="filter-bar">
   <div class="filter-track">
-    <button class="pill active" data-year="all">
-      <span class="pill-dot"></span><span>الكل</span>
-    </button>
+    <button class="pill active" data-year="all"><span class="pill-dot"></span><span>الكل</span></button>
+    <button class="pill" data-year="2006"><span>2006</span></button>
+    <button class="pill" data-year="2007"><span>2007</span></button>
+    <button class="pill" data-year="2008"><span>2008</span></button>
+    <button class="pill" data-year="2009"><span>2009</span></button>
     <button class="pill" data-year="2010"><span>2010</span></button>
     <button class="pill" data-year="2011"><span>2011</span></button>
     <button class="pill" data-year="2012"><span>2012</span></button>
@@ -56,72 +329,66 @@
   </div>
 </div>
 
-<!-- ── Stats Bar ──────────────────────────────────── -->
 <div class="stats-bar" id="statsBar"></div>
 
-<!-- ── Grid ──────────────────────────────────────── -->
 <main class="main">
-
-  <!-- Loading skeletons -->
   <div id="loadingState" class="grid">
     <div class="skeleton-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line sk-w60"></div><div class="sk-line sk-w40"></div><div class="sk-line sk-w80 sk-price"></div></div></div>
     <div class="skeleton-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line sk-w80"></div><div class="sk-line sk-w60"></div><div class="sk-line sk-w50 sk-price"></div></div></div>
     <div class="skeleton-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line sk-w50"></div><div class="sk-line sk-w70"></div><div class="sk-line sk-w60 sk-price"></div></div></div>
     <div class="skeleton-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line sk-w70"></div><div class="sk-line sk-w40"></div><div class="sk-line sk-w55 sk-price"></div></div></div>
   </div>
-
   <div id="emptyState" class="empty hidden">
     <div class="empty-glyph">𝕏</div>
     <h3>لا توجد حسابات متاحة</h3>
     <p>حسابات جديدة تُضاف باستمرار — تابعنا!</p>
   </div>
-
   <div id="accountsGrid" class="grid"></div>
 </main>
 
-<!-- ── Detail Modal ───────────────────────────────── -->
-<div id="modal" class="sheet-overlay hidden">
+<!-- Detail Sheet -->
+<div id="modal" class="sheet-overlay hidden" onclick="if(event.target===this)closeModal()">
   <div class="sheet" id="sheetCard">
-    <div class="sheet-handle"></div>
-
+    <div class="sheet-handle" onclick="closeModal()"></div>
     <div id="modalImageWrap" class="sheet-hero"></div>
-
     <div class="sheet-body">
       <div class="sheet-meta" id="sheetMeta"></div>
       <h2 id="modalName" class="sheet-name"></h2>
+      <div id="modalStats" class="sheet-stats"></div>
       <p id="modalDesc" class="sheet-desc"></p>
-
+      <div id="modalFeatures" class="sheet-features hidden">
+        <h4>⭐ المميزات الخاصة</h4>
+        <div class="features-list" id="featuresList"></div>
+      </div>
       <div class="sheet-price-row">
         <div>
           <div class="sheet-price" id="modalPrice"></div>
-          <div class="sheet-price-sub">USD · تسليم فوري</div>
+          <div class="sheet-price-sub">USD · تسليم فوري ⚡</div>
         </div>
         <div class="trust-icons">
           <span title="Verified">✅</span>
           <span title="Secure">🔒</span>
+          <span title="Instant">⚡</span>
         </div>
       </div>
-
       <button id="modalBuyBtn" class="buy-btn">
         <span class="buy-btn-inner">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
           اشتري الآن
         </span>
-        <span class="buy-ripple"></span>
       </button>
-
       <div class="sheet-note">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        تواصل مع <strong>@l825h</strong> برقم طلبك لإتمام الدفع
+        بعد الطلب تواصل مع <strong>@l825h</strong> لإتمام الدفع وسيرسل لك بيانات الحساب فوراً
       </div>
     </div>
   </div>
 </div>
 
-<!-- ── Success Modal ──────────────────────────────── -->
-<div id="successModal" class="sheet-overlay hidden">
+<!-- Success Sheet -->
+<div id="successModal" class="sheet-overlay hidden" onclick="if(event.target===this)closeSuccess()">
   <div class="sheet success-sheet">
-    <div class="sheet-handle"></div>
+    <div class="sheet-handle" onclick="closeSuccess()"></div>
     <div class="success-anim">
       <div class="success-ring"></div>
       <svg class="success-check" viewBox="0 0 52 52">
@@ -135,15 +402,217 @@
         <path class="check-tick" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
       </svg>
     </div>
-    <h2 class="success-title">🎉 تم الطلب بنجاح!</h2>
+    <h2 class="success-title">🎉 تم تسجيل طلبك!</h2>
     <div id="successDetails" class="success-details"></div>
-    <button id="successClose" class="buy-btn success-btn">فهمت!</button>
+    <button id="successClose" class="buy-btn success-btn" onclick="closeSuccess()">تم! شكراً</button>
   </div>
 </div>
 
-<!-- ── Toast ──────────────────────────────────────── -->
 <div id="toast" class="toast"></div>
 
-<script src="/static/js/shop.js"></script>
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+let allAccounts = [], currentAcc = null, activeFilter = "all", searchQ = "";
+
+async function loadAccounts() {
+  try {
+    const r = await fetch('/api/accounts');
+    allAccounts = await r.json();
+    loadStats();
+    render();
+  } catch(e) {
+    showToast('فشل تحميل البيانات');
+  } finally {
+    document.getElementById('loadingState').classList.add('hidden');
+  }
+}
+
+async function loadStats() {
+  try {
+    const r = await fetch('/api/stats');
+    const s = await r.json();
+    document.getElementById('statsBar').innerHTML =
+      `<div class="stat-chip">📦 <strong>${s.available}</strong> متاح</div>
+       <div class="stat-chip">🔴 <strong>${s.sold}</strong> مباع</div>
+       <div class="stat-chip">📋 <strong>${s.total}</strong> إجمالي</div>`;
+  } catch(e) {}
+}
+
+function fmtNum(n) {
+  n = parseInt(n||0);
+  if(n>=1e6) return (n/1e6).toFixed(1)+'M';
+  if(n>=1e3) return (n/1e3).toFixed(1)+'K';
+  return n.toString();
+}
+
+function render() {
+  const grid = document.getElementById('accountsGrid');
+  const empty = document.getElementById('emptyState');
+
+  let filtered = allAccounts;
+  if (activeFilter !== "all") filtered = filtered.filter(a => String(a.creation_year) === activeFilter);
+  if (searchQ) filtered = filtered.filter(a =>
+    (a.name||"").toLowerCase().includes(searchQ) ||
+    (a.description||"").toLowerCase().includes(searchQ) ||
+    (a.features||"").toLowerCase().includes(searchQ)
+  );
+
+  if (!filtered.length) { empty.classList.remove('hidden'); grid.innerHTML=''; return; }
+  empty.classList.add('hidden');
+
+  grid.innerHTML = filtered.map(a => {
+    const imgHtml = a.image
+      ? `<div class="card-img"><img src="${a.image}" alt="${a.name}" loading="lazy" onerror="this.parentElement.className='card-img no-img'; this.remove(); this.parentElement.innerHTML='<span style=font-size:36px>𝕏</span>';"/></div>`
+      : `<div class="card-img no-img"><span style="font-size:36px;opacity:.3">𝕏</span></div>`;
+    const year = a.creation_year ? `<div class="card-year">📅 ${a.creation_year}</div>` : '';
+    const followers = a.followers ? `<div class="card-followers">👥 ${fmtNum(a.followers)} متابع</div>` : '';
+    return `<div class="account-card" onclick="openModal(${a.id})">
+      ${a.creation_year && a.creation_year <= 2010 ? '<div class="card-badge">نادر</div>' : ''}
+      ${imgHtml}
+      <div class="card-body">
+        <div class="card-name">${a.name}</div>
+        ${year}
+        ${followers}
+        <div class="card-price">$${parseFloat(a.price).toFixed(0)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openModal(id) {
+  currentAcc = allAccounts.find(a => a.id === id);
+  if (!currentAcc) return;
+
+  // Image
+  const wrap = document.getElementById('modalImageWrap');
+  wrap.innerHTML = currentAcc.image
+    ? `<img src="${currentAcc.image}" alt="${currentAcc.name}" style="max-height:260px;width:100%;object-fit:cover"/>`
+    : `<div class="sheet-hero-placeholder">𝕏</div>`;
+
+  // Meta badges
+  let meta = '';
+  if (currentAcc.creation_year) meta += `<span class="meta-badge">📅 ${currentAcc.creation_year}</span>`;
+  if (currentAcc.creation_year && currentAcc.creation_year <= 2010) meta += `<span class="meta-badge purple">💎 نادر جداً</span>`;
+  meta += `<span class="meta-badge green">✅ أصيل</span>`;
+  document.getElementById('sheetMeta').innerHTML = meta;
+
+  document.getElementById('modalName').textContent = currentAcc.name;
+  document.getElementById('modalPrice').textContent = `$${parseFloat(currentAcc.price).toFixed(2)}`;
+  document.getElementById('modalDesc').textContent = currentAcc.description || 'حساب تويتر/X أصيل وموثوق للبيع.';
+
+  // Stats
+  const statsEl = document.getElementById('modalStats');
+  if (currentAcc.followers || currentAcc.tweets_count) {
+    statsEl.innerHTML =
+      `<div class="stat-box"><div class="stat-box-val">${fmtNum(currentAcc.followers)}</div><div class="stat-box-lbl">متابع</div></div>
+       <div class="stat-box"><div class="stat-box-val">${fmtNum(currentAcc.tweets_count)}</div><div class="stat-box-lbl">تغريدة</div></div>`;
+    statsEl.classList.remove('hidden');
+  } else {
+    statsEl.innerHTML = '';
+  }
+
+  // Features
+  const feats = (currentAcc.features || '').trim();
+  const featEl = document.getElementById('modalFeatures');
+  if (feats) {
+    document.getElementById('featuresList').innerHTML = feats.split(/[,،\n]+/).map(f => f.trim()).filter(Boolean).map(f => `<span class="feature-tag">${f}</span>`).join('');
+    featEl.classList.remove('hidden');
+  } else {
+    featEl.classList.add('hidden');
+  }
+
+  document.getElementById('modal').classList.remove('hidden');
+  if (tg) tg.BackButton.show();
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+  if (tg) tg.BackButton.hide();
+}
+
+function closeSuccess() {
+  document.getElementById('successModal').classList.add('hidden');
+}
+
+document.getElementById('modalBuyBtn').onclick = async function() {
+  if (!currentAcc) return;
+  this.disabled = true;
+  this.innerHTML = '<span class="buy-btn-inner">⏳ جاري الطلب…</span>';
+
+  try {
+    const fd = new FormData();
+    fd.append('account_id', currentAcc.id);
+    if (tg?.initData) fd.append('initData', tg.initData);
+
+    const r = await fetch('/api/buy', { method: 'POST', body: fd });
+    const d = await r.json();
+
+    if (d.success) {
+      closeModal();
+      document.getElementById('successDetails').innerHTML =
+        `<strong>رقم طلبك: #${d.order_id}</strong><br>الحساب: ${d.account_name}<br>المبلغ: $${parseFloat(d.price).toFixed(2)}<br><br>تواصل مع <strong>@l825h</strong> مع رقم طلبك لإتمام الدفع ⚡`;
+      document.getElementById('successModal').classList.remove('hidden');
+      allAccounts = allAccounts.filter(a => a.id !== currentAcc.id);
+      render();
+    } else {
+      showToast(d.error || 'حدث خطأ');
+    }
+  } catch(e) {
+    showToast('فشل إرسال الطلب، حاول مجدداً');
+  } finally {
+    this.disabled = false;
+    this.innerHTML = '<span class="buy-btn-inner"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>اشتري الآن</span>';
+  }
+};
+
+// Filters
+document.querySelectorAll('.pill').forEach(p => p.addEventListener('click', () => {
+  document.querySelectorAll('.pill').forEach(x => x.classList.remove('active'));
+  p.classList.add('active');
+  activeFilter = p.dataset.year;
+  render();
+}));
+
+// Search
+const searchToggle = document.getElementById('searchToggle');
+const searchBar    = document.getElementById('searchBar');
+const searchInput  = document.getElementById('searchInput');
+const searchClear  = document.getElementById('searchClear');
+
+searchToggle.onclick = () => {
+  searchBar.classList.toggle('open');
+  if (searchBar.classList.contains('open')) searchInput.focus();
+};
+searchInput.oninput = e => {
+  searchQ = e.target.value.toLowerCase().trim();
+  searchClear.classList.toggle('hidden', !searchQ);
+  render();
+};
+searchClear.onclick = () => {
+  searchInput.value = ''; searchQ = '';
+  searchClear.classList.add('hidden');
+  render();
+};
+
+// Telegram back button
+if (tg) tg.BackButton.onClick(closeModal);
+
+function showToast(msg, duration = 3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+loadAccounts();
+
+// Handle URL account param
+const urlAcc = new URLSearchParams(location.search).get('account');
+if (urlAcc) setTimeout(() => {
+  const acc = allAccounts.find(a => a.id == urlAcc);
+  if (acc) openModal(acc.id);
+}, 800);
+</script>
 </body>
 </html>

@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 
 def run_bot() -> None:
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     from config import BOT_TOKEN
     if not BOT_TOKEN:
         logger.warning(

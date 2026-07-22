@@ -282,6 +282,33 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
 
 
+async def cmd_test_stars(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin-only: send a real 1-Star test invoice to diagnose Stars payment issues."""
+    if not _is_admin(update.effective_user.id):
+        return
+    user = update.effective_user
+    await update.message.reply_text("🔬 <b>اختبار النجوم...</b>", parse_mode=ParseMode.HTML)
+    try:
+        await context.bot.send_invoice(
+            chat_id=user.id,
+            title="⭐ اختبار دفع النجوم",
+            description="اختبار تشخيصي — لا تدفع",
+            payload="test_stars_diag",
+            provider_token="",
+            currency="XTR",
+            prices=[LabeledPrice(label="اختبار", amount=1)],
+        )
+        await update.message.reply_text(
+            "✅ <b>نجح إرسال الفاتورة!</b>\n\nبيانات النجوم تعمل بشكل صحيح.",
+            parse_mode=ParseMode.HTML
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"❌ <b>فشل الاختبار — الخطأ الحقيقي:</b>\n\n<code>{e}</code>",
+            parse_mode=ParseMode.HTML
+        )
+
+
 # ── Successful Payment Handler (Telegram Stars) ────────────
 
 async def successful_payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

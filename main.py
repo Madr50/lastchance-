@@ -31,7 +31,7 @@ async def _bot_main() -> None:
         MessageHandler, PreCheckoutQueryHandler, filters
     )
     from bot_handlers import (
-        cmd_start, cmd_help, cmd_shop, cmd_admin, cmd_cancel,
+        cmd_start, cmd_help, cmd_shop, cmd_admin, cmd_cancel, cmd_test_stars,
         button_handler, message_handler, photo_handler,
         pre_checkout_handler, successful_payment_handler
     )
@@ -43,7 +43,8 @@ async def _bot_main() -> None:
     bot_app.add_handler(CommandHandler("help",   cmd_help))
     bot_app.add_handler(CommandHandler("shop",   cmd_shop))
     bot_app.add_handler(CommandHandler("admin",  cmd_admin))
-    bot_app.add_handler(CommandHandler("cancel", cmd_cancel))
+    bot_app.add_handler(CommandHandler("cancel",     cmd_cancel))
+    bot_app.add_handler(CommandHandler("test_stars", cmd_test_stars))
 
     # Inline button presses
     bot_app.add_handler(CallbackQueryHandler(button_handler))

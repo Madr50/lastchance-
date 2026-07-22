@@ -45,11 +45,14 @@ def health():
 # ── Pages ───────────────────────────────────────────────────
 @app.route("/")
 def index():
-    return render_template("index.html")
+    from config import ADMIN_USERNAME, SHOP_NAME
+    return render_template("index.html", admin_username=ADMIN_USERNAME, shop_name=SHOP_NAME)
 
 
 @app.route("/admin")
 def admin():
+    # The admin panel HTML handles its own auth via JS (password login / Telegram initData).
+    # API endpoints behind @admin_required provide the real server-side protection.
     return render_template("admin.html")
 
 

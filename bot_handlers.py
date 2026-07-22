@@ -1,7 +1,7 @@
 # bot_handlers.py — Complete premium bot with Stars + USDT payments
 import logging
 import os
-from telegram import Update, InputMediaPhoto, LabeledPrice
+from telegram import Update, InputMediaPhoto, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
@@ -90,7 +90,7 @@ def _account_card(acc: dict, show_private: bool = False) -> str:
         pw    = acc.get('password') or '—'
         private = (
             f"\n{_divider()}\n"
-            f"🔐 <b>بيانات الدخول (خاص):</b>\n"
+            f"🔐 <b>بيانات الدخول (خاص — أدمن فقط):</b>\n"
             f"  📧 الإيميل:  <code>{email}</code>\n"
             f"  🔑 الباسورد: <code>{pw}</code>\n"
         )
@@ -120,8 +120,44 @@ def _build_stats_text(stats: dict) -> str:
     )
 
 
+async def _safe_reply(query, text: str, parse_mode=ParseMode.HTML, reply_markup=None) -> None:
+    """
+    Universal reply helper that works on BOTH text and media (photo/video) messages.
+    - Text messages: edits in place.
+    - Photo/media messages: sends a new text message then deletes the old one.
+    This fixes the 'اشتري هذا الحساب' button failing on photo account cards.
+    """
+    msg = query.message
+    has_media = bool(msg.photo or msg.video or msg.document or msg.sticker or msg.audio)
+
+    if has_media:
+        # Can't edit text on a media message — send new message, delete old
+        try:
+            await msg.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+        except Exception as e:
+            logger.warning(f"_safe_reply new message failed: {e}")
+            return
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+    else:
+        try:
+            await query.edit_message_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+        except Exception as e:
+            logger.warning(f"_safe_reply edit failed, trying reply: {e}")
+            try:
+                await msg.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+            except Exception as e2:
+                logger.warning(f"_safe_reply fallback also failed: {e2}")
+
+
 async def _deliver_account(bot, buyer_id: int, order: dict) -> bool:
-    """Send account credentials to the buyer. Returns True on success."""
+    """Send account credentials privately to the buyer. Returns True on success."""
+    if not buyer_id or buyer_id == 0:
+        logger.warning("_deliver_account called with buyer_id=0, skipping.")
+        return False
+
     email    = order.get('account_email') or '—'
     password = order.get('account_password') or '—'
     features = order.get('account_features') or ''
@@ -143,6 +179,7 @@ async def _deliver_account(bot, buyer_id: int, order: dict) -> bool:
         "✨ <i>شكراً لثقتك بنا — استمتع بحسابك!</i>"
     )
     try:
+        # Always send as a private message directly to the buyer's user ID
         await bot.send_message(chat_id=buyer_id, text=msg, parse_mode=ParseMode.HTML)
         return True
     except Exception as e:
@@ -253,8 +290,8 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     payload = payment.invoice_payload  # format: "acc_{acc_id}_{buyer_id}"
 
     try:
-        parts  = payload.split("_")
-        acc_id = int(parts[1])
+        parts    = payload.split("_")
+        acc_id   = int(parts[1])
         buyer_id = int(parts[2])
     except (IndexError, ValueError):
         logger.error(f"Bad Stars payment payload: {payload}")
@@ -264,6 +301,12 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
             parse_mode=ParseMode.HTML
         )
         return
+
+    # Security: buyer_id in payload must match the actual payer
+    actual_buyer = update.effective_user.id
+    if buyer_id != actual_buyer:
+        logger.warning(f"Stars payload buyer_id mismatch: payload={buyer_id}, actual={actual_buyer}")
+        buyer_id = actual_buyer
 
     account = get_account(acc_id)
     if not account:
@@ -281,11 +324,11 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     update_account(acc_id, status='sold')
     update_order(order_id, 'completed')
 
-    # Deliver credentials immediately
-    order = get_order(order_id)
+    # Deliver credentials immediately — private message to buyer only
+    order     = get_order(order_id)
     delivered = await _deliver_account(context.bot, buyer_id, order)
 
-    # Notify admin
+    # Notify admin privately
     stars_paid = payment.total_amount
     try:
         await context.bot.send_message(
@@ -612,13 +655,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context.user_data.clear()
         stats = get_stats()
         if _is_admin(user.id):
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 _build_stats_text(stats),
                 parse_mode=ParseMode.HTML,
                 reply_markup=admin_keyboard()
             )
         else:
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 f"✨ <b>القائمة الرئيسية — {SHOP_NAME}</b>\n\n"
                 f"📦 <b>{stats['available']}</b> حساب متاح الآن\n\n"
                 "👇 <i>اختر من القائمة</i>",
@@ -631,7 +676,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if data in ("browse_accounts", "list_accounts"):
         accounts = get_all_accounts(status="available")
         if not accounts:
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 "😔 <b>لا توجد حسابات متاحة حالياً</b>\n\nتابعنا للتحديثات! 🔔",
                 parse_mode=ParseMode.HTML,
                 reply_markup=back_to_menu_keyboard()
@@ -645,7 +691,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"الصفحة 1 من {total_pages}\n\n"
             "<i>اختر حساباً لعرض تفاصيله</i>"
         )
-        await query.edit_message_text(
+        await _safe_reply(
+            query,
             header,
             parse_mode=ParseMode.HTML,
             reply_markup=user_accounts_page_keyboard(chunk, 0, total_pages)
@@ -665,7 +712,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"الصفحة {page+1} من {total_pages}\n\n"
             "<i>اختر حساباً لعرض تفاصيله</i>"
         )
-        await query.edit_message_text(
+        await _safe_reply(
+            query,
             header,
             parse_mode=ParseMode.HTML,
             reply_markup=user_accounts_page_keyboard(chunk, page, total_pages)
@@ -699,9 +747,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "⭐ <b>الدفع بالنجوم:</b> تسليم فوري تلقائي 100٪\n"
             "💎 <b>الدفع بـ USDT:</b> تسليم فور تأكيد الأدمن"
         )
-        await query.edit_message_text(
-            text, parse_mode=ParseMode.HTML, reply_markup=back_to_menu_keyboard()
-        )
+        await _safe_reply(query, text, parse_mode=ParseMode.HTML, reply_markup=back_to_menu_keyboard())
         return
 
     # ── How to buy ────────────────────────────────────────
@@ -723,9 +769,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"{_divider()}\n"
             "✨ <i>سريع · آمن · مضمون</i>"
         )
-        await query.edit_message_text(
-            text, parse_mode=ParseMode.HTML, reply_markup=back_to_menu_keyboard()
-        )
+        await _safe_reply(query, text, parse_mode=ParseMode.HTML, reply_markup=back_to_menu_keyboard())
         return
 
     # ── About ─────────────────────────────────────────────
@@ -745,9 +789,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"  🔴 تم بيعها:        <b>{stats['sold']}</b>\n\n"
             f"📞 تواصل مباشر: <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>"
         )
-        await query.edit_message_text(
-            text, parse_mode=ParseMode.HTML, reply_markup=back_to_menu_keyboard()
-        )
+        await _safe_reply(query, text, parse_mode=ParseMode.HTML, reply_markup=back_to_menu_keyboard())
         return
 
     # ── Account Detail (user) ─────────────────────────────
@@ -759,14 +801,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             account = None
 
         if not account:
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 "❌ الحساب غير موجود أو تم حذفه.",
                 reply_markup=back_to_menu_keyboard()
             )
             return
 
         if account['status'] != 'available':
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 f"⚠️ <b>هذا الحساب غير متاح حالياً</b>\n\n"
                 f"الحالة: {_status_label(account['status'])}",
                 parse_mode=ParseMode.HTML,
@@ -774,7 +818,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
             return
 
-        text = _account_card(account)
+        # Show PUBLIC info only — no email/password
+        text = _account_card(account, show_private=False)
         kb   = account_card_keyboard(acc_id)
         img  = account.get("image_path")
 
@@ -791,10 +836,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Exception as e:
             logger.warning(f"Photo send failed: {e}")
 
-        await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+        await _safe_reply(query, text, parse_mode=ParseMode.HTML, reply_markup=kb)
         return
 
     # ── Buy (user) — show payment method selection ────────
+    # Handles: buy_{acc_id}
     if data.startswith("buy_") and not data.startswith("buy_confirm"):
         try:
             acc_id  = int(data.split("_", 1)[1])
@@ -803,7 +849,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             account = None
 
         if not account or account['status'] != 'available':
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 "❌ <b>هذا الحساب لم يعد متاحاً.</b>",
                 parse_mode=ParseMode.HTML,
                 reply_markup=back_to_menu_keyboard()
@@ -825,11 +872,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"   تسليم بعد تأكيد الأدمن\n\n"
             "👇 <i>اختر طريقة الدفع المناسبة لك</i>"
         )
-        await query.edit_message_text(
-            text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=payment_method_keyboard(acc_id, account['price'])
-        )
+        # _safe_reply handles both text & photo messages — fixes the broken buy button
+        await _safe_reply(query, text, parse_mode=ParseMode.HTML,
+                          reply_markup=payment_method_keyboard(acc_id, account['price']))
         return
 
     # ── Pay with Stars ────────────────────────────────────
@@ -841,7 +886,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             account = None
 
         if not account or account['status'] != 'available':
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 "❌ <b>الحساب لم يعد متاحاً — ربما حجزه شخص آخر.</b>",
                 parse_mode=ParseMode.HTML,
                 reply_markup=back_to_menu_keyboard()
@@ -865,7 +911,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 currency="XTR",
                 prices=[LabeledPrice(label=account['name'], amount=stars)],
             )
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 f"⭐ <b>فاتورة النجوم أُرسلت!</b>\n\n"
                 f"📦 الحساب: <b>{account['name']}</b>\n"
                 f"💫 المبلغ: <b>{stars} نجمة</b>\n\n"
@@ -875,7 +922,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
         except Exception as e:
             logger.error(f"Failed to send Stars invoice: {e}")
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 f"❌ <b>فشل إرسال فاتورة النجوم</b>\n\n"
                 f"تأكد أن البوت مفعّل للدفع بالنجوم من BotFather.\n\n"
                 f"تواصل مع الأدمن: <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>",
@@ -893,7 +941,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             account = None
 
         if not account or account['status'] != 'available':
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 "❌ <b>الحساب لم يعد متاحاً — ربما حجزه شخص آخر.</b>",
                 parse_mode=ParseMode.HTML,
                 reply_markup=back_to_menu_keyboard()
@@ -904,7 +953,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         order_id       = create_order(acc_id, user.id, buyer_username)
         update_account(acc_id, status='reserved')
 
-        # Notify admin
+        # Notify admin privately
         try:
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
@@ -940,11 +989,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"مع رقم طلبك: <code>#{order_id}</code>\n\n"
             "⚡ <i>تسليم بيانات الحساب فور تأكيد الأدمن</i>"
         )
-        await query.edit_message_text(
-            success_text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=back_to_menu_keyboard()
-        )
+        await _safe_reply(query, success_text, parse_mode=ParseMode.HTML, reply_markup=back_to_menu_keyboard())
         return
 
     # ── Backward compat: confirm_buy redirects to payment selection ──
@@ -956,7 +1001,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             account = None
 
         if not account or account['status'] != 'available':
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 "❌ <b>الحساب لم يعد متاحاً — ربما حجزه شخص آخر.</b>",
                 parse_mode=ParseMode.HTML,
                 reply_markup=back_to_menu_keyboard()
@@ -978,25 +1024,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"   تسليم بعد تأكيد الأدمن\n\n"
             "👇 <i>اختر طريقة الدفع المناسبة لك</i>"
         )
-        await query.edit_message_text(
-            text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=payment_method_keyboard(acc_id, account['price'])
-        )
+        await _safe_reply(query, text, parse_mode=ParseMode.HTML,
+                          reply_markup=payment_method_keyboard(acc_id, account['price']))
         return
 
     # ═══════════════════════════════════════════════════════
-    # ADMIN CALLBACKS
+    # ADMIN CALLBACKS — all require admin authentication
     # ═══════════════════════════════════════════════════════
 
     if not _is_admin(user.id):
-        await query.answer("⛔ وصول مرفوض", show_alert=True)
+        await query.answer("⛔ وصول مرفوض — هذا الزر للمسؤول فقط", show_alert=True)
         return
 
     # ── Admin stats ───────────────────────────────────────
     if data == "admin_stats":
         stats = get_stats()
-        await query.edit_message_text(
+        await _safe_reply(
+            query,
             _build_stats_text(stats),
             parse_mode=ParseMode.HTML,
             reply_markup=admin_keyboard()
@@ -1007,7 +1051,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if data == "admin_pending_orders":
         orders = get_pending_orders()
         if not orders:
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 "📭 <b>لا توجد طلبات معلقة</b>",
                 parse_mode=ParseMode.HTML,
                 reply_markup=admin_keyboard()
@@ -1029,9 +1074,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"✅ تأكيد طلب #{o['id']}", callback_data=f"admin_confirm_order_{o['id']}"
         )] for o in orders[:5]]
         rows.append([InlineKeyboardButton("🔙  رجوع", callback_data="back_menu")])
-        from telegram import InlineKeyboardMarkup
-        await query.edit_message_text(
-            text, parse_mode=ParseMode.HTML,
+        await _safe_reply(
+            query,
+            text,
+            parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(rows)
         )
         return
@@ -1048,7 +1094,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"{_divider()}\n"
             f"الصفحة {page+1} من {total_pages}"
         )
-        await query.edit_message_text(
+        await _safe_reply(
+            query,
             header,
             parse_mode=ParseMode.HTML,
             reply_markup=accounts_page_keyboard(chunk, page, total_pages)
@@ -1060,8 +1107,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         acc_id  = int(data.split("_")[-1])
         account = get_account(acc_id)
         if not account:
-            await query.edit_message_text("❌ الحساب غير موجود", reply_markup=admin_keyboard())
+            await _safe_reply(query, "❌ الحساب غير موجود", reply_markup=admin_keyboard())
             return
+        # Admin sees private data (email/password)
         text = _account_card(account, show_private=True)
         img  = account.get("image_path")
         try:
@@ -1076,7 +1124,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 return
         except Exception as e:
             logger.warning(f"Photo error: {e}")
-        await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=admin_account_keyboard(acc_id))
+        await _safe_reply(query, text, parse_mode=ParseMode.HTML, reply_markup=admin_account_keyboard(acc_id))
         return
 
     # ── Admin start add account ───────────────────────────
@@ -1084,7 +1132,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context.user_data.clear()
         context.user_data[STATE] = S_ADD_NAME
         context.user_data[DRAFT] = {}
-        await query.edit_message_text(
+        await _safe_reply(
+            query,
             f"➕ <b>إضافة حساب جديد</b>\n"
             f"{_divider()}\n\n"
             "📝 أرسل <b>اسم الحساب</b> (مثال: @oldtwitter2010)\n\n"
@@ -1098,9 +1147,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         acc_id = int(data.split("_")[-1])
         account = get_account(acc_id)
         if not account:
-            await query.edit_message_text("❌ الحساب غير موجود")
+            await _safe_reply(query, "❌ الحساب غير موجود")
             return
-        await query.edit_message_text(
+        await _safe_reply(
+            query,
             f"✏️ <b>تعديل الحساب: {account['name']}</b>\n\n"
             "اختر الحقل الذي تريد تعديله:",
             parse_mode=ParseMode.HTML,
@@ -1116,7 +1166,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         update_account(acc_id, status=status)
         account = get_account(acc_id)
         await query.answer(f"✅ تم تغيير الحالة إلى {status}", show_alert=False)
-        await query.edit_message_text(
+        await _safe_reply(
+            query,
             f"✏️ <b>تعديل الحساب: {account['name']}</b>\n\n"
             f"الحالة الجديدة: {_status_label(status)}\n\n"
             "اختر الحقل الذي تريد تعديله:",
@@ -1142,7 +1193,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context.user_data[EDIT_ID]  = acc_id
         context.user_data[EDIT_FIELD] = field
 
-        await query.edit_message_text(
+        await _safe_reply(
+            query,
             f"✏️ <b>تعديل: {field_labels.get(field, field)}</b>\n\n"
             f"{'أرسل الصورة الجديدة:' if field == 'image' else f'أرسل القيمة الجديدة لـ <b>{field_labels.get(field, field)}</b>:'}\n\n"
             "<i>أرسل /cancel للإلغاء</i>",
@@ -1155,9 +1207,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         acc_id  = int(data.split("_")[-1])
         account = get_account(acc_id)
         if not account:
-            await query.edit_message_text("❌ الحساب غير موجود")
+            await _safe_reply(query, "❌ الحساب غير موجود")
             return
-        await query.edit_message_text(
+        await _safe_reply(
+            query,
             f"⚠️ <b>تأكيد الحذف</b>\n\n"
             f"هل تريد حذف الحساب:\n<b>{account['name']}</b>؟\n\n"
             "هذا الإجراء لا يمكن التراجع عنه.",
@@ -1172,7 +1225,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         acc    = get_account(acc_id)
         name   = acc['name'] if acc else "—"
         delete_account(acc_id)
-        await query.edit_message_text(
+        await _safe_reply(
+            query,
             f"🗑️ <b>تم حذف الحساب</b>\n\n"
             f"الحساب <b>{name}</b> تم حذفه بنجاح.",
             parse_mode=ParseMode.HTML,
@@ -1186,10 +1240,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         order    = get_order(order_id)
 
         if not order:
-            await query.edit_message_text("❌ الطلب غير موجود.")
+            await _safe_reply(query, "❌ الطلب غير موجود.")
             return
         if order['status'] in ('completed', 'cancelled'):
-            await query.edit_message_text(
+            await _safe_reply(
+                query,
                 f"⚠️ الطلب #{order_id} سبق معالجته (الحالة: {order['status']})"
             )
             return
@@ -1197,6 +1252,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         update_order(order_id, 'completed')
         update_account(order['account_id'], status='sold')
 
+        # Deliver credentials privately to buyer only
         delivered = await _deliver_account(context.bot, order['buyer_id'], order)
 
         admin_confirm = (
@@ -1205,7 +1261,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"👤 @{order.get('buyer_username','—')}\n"
             f"{'📬 تم إرسال بيانات الدخول للمشتري ⚡' if delivered else '⚠️ فشل إرسال البيانات للمشتري — أرسلها يدوياً'}"
         )
-        await query.edit_message_text(admin_confirm, parse_mode=ParseMode.HTML, reply_markup=admin_keyboard())
+        await _safe_reply(query, admin_confirm, parse_mode=ParseMode.HTML, reply_markup=admin_keyboard())
         return
 
     # ── Admin reject order ────────────────────────────────
@@ -1213,7 +1269,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         order_id = int(data.split("_")[-1])
         order    = get_order(order_id)
         if not order:
-            await query.edit_message_text("❌ الطلب غير موجود.")
+            await _safe_reply(query, "❌ الطلب غير موجود.")
             return
 
         update_order(order_id, 'cancelled')
@@ -1231,7 +1287,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Exception as e:
             logger.warning(f"Could not notify buyer of rejection: {e}")
 
-        await query.edit_message_text(
+        await _safe_reply(
+            query,
             f"❌ <b>تم رفض الطلب #{order_id}</b> وإعادة الحساب للمتجر.",
             parse_mode=ParseMode.HTML,
             reply_markup=admin_keyboard()
@@ -1244,7 +1301,3 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     logger.debug(f"Unhandled callback: {data}")
-
-
-# ── InlineKeyboardButton import fix ───────────────────────
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup

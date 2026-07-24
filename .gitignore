@@ -1,0 +1,15 @@
+# Ignore local database files and common artifacts
+
+# DB files
+shop.db
+shop.db-shm
+shop.db-wal
+
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Editor
+.vscode/
+.idea/

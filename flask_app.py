@@ -1,452 +1,627 @@
-# flask_app.py
+# flask_app.py — Complete marketplace API with mini app routes
 import os
 import time
 import logging
-from typing import Optional
-from flask import Flask, request, jsonify, render_template, send_from_directory, session
+import json as _json
+from typing import Optional, Dict, List
+from datetime import datetime
+from functools import wraps
 
+from flask import Flask, request, jsonify, render_template, send_from_directory, session, Response
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 from auth_middleware import admin_required, is_session_admin, get_user_from_request
 from database import (
+    get_or_create_user, get_user, update_user, get_user_by_telegram_id,
     get_all_accounts, get_all_accounts_admin, get_account,
     add_account, update_account, delete_account,
     get_all_orders, get_pending_orders, update_order, get_stats,
-    create_order, get_order
+    create_order, get_order,
+    get_or_create_chat, send_message, get_messages,
+    get_marketplace_stats,
 )
-from config import ADMIN_ID, ADMIN_PASSWORD
+from config import ADMIN_ID, ADMIN_PASSWORD, get_payment_methods, calculate_commission
 
 logger = logging.getLogger(__name__)
 
-UPLOAD_FOLDER      = "static/images/accounts"
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
+UPLOAD_FOLDER = "static/images/accounts"
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "mp4", "mov"}
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "change-me-in-prod-123!")
-app.config["UPLOAD_FOLDER"]      = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
-CORS(app)
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 def allowed_file(filename: str) -> bool:
+    """Check if file extension is allowed."""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-# ── Health ──────────────────────────────────────────────────
+# ============================================================
+# HEALTH & STATUS
+# ============================================================
+
 @app.route("/health")
 @app.route("/ping")
 def health():
-    return jsonify({"status": "ok"}), 200
+    """Health check endpoint."""
+    return jsonify({"status": "ok", "timestamp": datetime.now().isoformat()}), 200
 
 
-# ── Pages ───────────────────────────────────────────────────
+# ============================================================
+# PAGE ROUTES
+# ============================================================
+
 @app.route("/")
 def index():
-    from config import ADMIN_USERNAME, SHOP_NAME
-    return render_template("index.html", admin_username=ADMIN_USERNAME, shop_name=SHOP_NAME)
+    """Main marketplace page."""
+    from config import MARKETPLACE_NAME
+    return render_template("index.html", marketplace_name=MARKETPLACE_NAME)
 
 
 @app.route("/admin")
 def admin():
-    # The admin panel HTML handles its own auth via JS (password login / Telegram initData).
-    # API endpoints behind @admin_required provide the real server-side protection.
+    """Admin dashboard."""
     return render_template("admin.html")
 
 
-# ── Auth ────────────────────────────────────────────────────
-@app.route("/api/admin/login", methods=["POST"])
-def api_admin_login():
-    data     = request.get_json(silent=True) or {}
+@app.route("/seller")
+def seller_dashboard():
+    """Seller dashboard."""
+    return render_template("seller.html")
+
+
+# ============================================================
+# AUTHENTICATION
+# ============================================================
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_login():
+    """Admin login with password."""
+    data = request.get_json(silent=True) or {}
     password = data.get("password", "").strip()
+    
     if password == ADMIN_PASSWORD:
         session["is_admin"] = True
-        session.permanent   = True
-        return jsonify({"success": True})
-    return jsonify({"error": "كلمة المرور غير صحيحة"}), 401
+        session.permanent = True
+        return jsonify({"success": True, "message": "تم تسجيل الدخول بنجاح"})
+    
+    return jsonify({"success": False, "error": "كلمة المرور غير صحيحة"}), 401
 
 
-@app.route("/api/admin/logout", methods=["POST"])
-def api_admin_logout():
+@app.route("/api/auth/logout", methods=["POST"])
+def api_logout():
+    """Logout."""
     session.clear()
     return jsonify({"success": True})
 
 
-@app.route("/api/admin/check", methods=["GET"])
-def api_admin_check():
+@app.route("/api/auth/check", methods=["GET"])
+def api_auth_check():
+    """Check authentication status."""
     if is_session_admin():
         return jsonify({"authed": True, "via": "session"})
+    
     user = get_user_from_request()
     if user and int(user.get("id", 0)) == ADMIN_ID:
         return jsonify({"authed": True, "via": "telegram"})
+    
     return jsonify({"authed": False}), 403
 
 
-# ── Public API ──────────────────────────────────────────────
-@app.route("/api/accounts", methods=["GET"])
-def api_get_accounts():
-    accounts = get_all_accounts(status="available")
-    return jsonify([_format_account_public(a) for a in accounts])
-
-
-@app.route("/api/accounts/<int:account_id>", methods=["GET"])
-def api_get_account(account_id):
-    a = get_account(account_id)
-    if not a:
-        return jsonify({"error": "Not found"}), 404
-    return jsonify(_format_account_public(a))
-
-
-@app.route("/api/stats", methods=["GET"])
-def api_stats():
-    return jsonify(get_stats())
-
-
-# ── Public buy ──────────────────────────────────────────────
-@app.route("/api/buy", methods=["POST"])
-def api_buy():
-    import json as _json
-    from urllib.parse import unquote
-
-    body       = request.get_json(silent=True) or {}
-    acc_id_raw = request.form.get("account_id") or body.get("account_id")
-    if not acc_id_raw:
-        return jsonify({"error": "account_id is required"}), 400
-
+@app.route("/api/auth/telegram", methods=["POST"])
+def api_telegram_auth():
+    """Authenticate with Telegram initData."""
+    data = request.get_json(silent=True) or {}
+    init_data = data.get("initData", "")
+    
+    if not init_data:
+        return jsonify({"success": False, "error": "No initData provided"}), 400
+    
     try:
-        acc_id = int(acc_id_raw)
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid account_id"}), 400
+        # Parse Telegram initData
+        params = dict(p.split("=", 1) for p in init_data.split("&") if "=" in p)
+        user_data = _json.loads(__import__("urllib.parse").unquote(params.get("user", "{}")))
+        
+        telegram_id = user_data.get("id")
+        if not telegram_id:
+            return jsonify({"success": False, "error": "Invalid user data"}), 400
+        
+        # Get or create user
+        user = get_or_create_user(
+            telegram_id=telegram_id,
+            username=user_data.get("username"),
+            first_name=user_data.get("first_name")
+        )
+        
+        return jsonify({
+            "success": True,
+            "user": {
+                "id": user["id"],
+                "telegram_id": user["telegram_id"],
+                "username": user["username"],
+                "first_name": user["first_name"]
+            }
+        })
+    
+    except Exception as e:
+        logger.error(f"Telegram auth error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
-    account = get_account(acc_id)
-    if not account:
-        return jsonify({"error": "Account not found"}), 404
-    if account["status"] != "available":
-        return jsonify({"error": "Account is no longer available"}), 409
 
-    buyer_id, buyer_username = 0, "unknown"
-    init_data_raw = request.form.get("initData") or request.headers.get("X-Init-Data", "")
-    if init_data_raw:
-        try:
-            params        = dict(p.split("=", 1) for p in init_data_raw.split("&") if "=" in p)
-            user          = _json.loads(unquote(params.get("user", "{}")))
-            buyer_id      = user.get("id", 0)
-            buyer_username = user.get("username", "unknown")
-        except Exception:
-            pass
+# ============================================================
+# PUBLIC LISTINGS API
+# ============================================================
 
-    order_id = create_order(acc_id, buyer_id, buyer_username)
-    update_account(acc_id, status="reserved")
-    _notify_admin_async(order_id, account, buyer_id, buyer_username)
-
-    from config import USDT_ADDRESS
+@app.route("/api/listings", methods=["GET"])
+def api_get_listings():
+    """Get all available listings."""
+    page = request.args.get("page", 1, type=int)
+    limit = request.args.get("limit", 20, type=int)
+    offset = (page - 1) * limit
+    
+    listings = get_all_accounts(status="available")
+    total = len(listings)
+    paginated = listings[offset:offset + limit]
+    
     return jsonify({
-        "success":      True,
-        "order_id":     order_id,
-        "account_name": account["name"],
-        "price":        account["price"],
-        "usdt_address": USDT_ADDRESS,
+        "listings": [_format_listing_public(l) for l in paginated],
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total + limit - 1) // limit
+        }
     })
 
 
-# ── Create Stars invoice link ────────────────────────────────
-@app.route("/api/create_invoice", methods=["POST"])
-def api_create_invoice():
-    import asyncio as _asyncio
-    from config import BOT_TOKEN
-
-    body       = request.get_json(silent=True) or {}
-    acc_id_raw = request.form.get("account_id") or body.get("account_id")
-    if not acc_id_raw:
-        return jsonify({"error": "account_id is required"}), 400
-    try:
-        acc_id = int(acc_id_raw)
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid account_id"}), 400
-
-    account = get_account(acc_id)
-    if not account:
-        return jsonify({"error": "Account not found"}), 404
-    if account["status"] != "available":
-        return jsonify({"error": "Account is no longer available"}), 409
-
-    if not BOT_TOKEN:
-        return jsonify({"error": "Bot not configured"}), 503
-
-    buyer_id_raw = request.form.get("buyer_id") or body.get("buyer_id", "0")
-    try:
-        buyer_id = int(buyer_id_raw)
-    except (ValueError, TypeError):
-        buyer_id = 0
-
-    from bot_keyboards import usd_to_stars
-    from telegram import Bot, LabeledPrice
-
-    stars    = usd_to_stars(account["price"])
-    payload  = f"acc_{acc_id}_{buyer_id}"
-    year_info = f" — {account['creation_year']}" if account.get("creation_year") else ""
-
-    async def _create_link():
-        return await Bot(BOT_TOKEN).create_invoice_link(
-            title=f"🐦 {account['name']}{year_info}",
-            description=(
-                f"حساب تويتر/X قديم وأصيل\n"
-                f"السعر: ${account['price']:.2f} • {stars} نجمة\n"
-                f"تسليم فوري بعد الدفع ⚡"
-            ),
-            payload=payload,
-            provider_token="",
-            currency="XTR",
-            prices=[LabeledPrice(label=account["name"], amount=stars)],
-        )
-
-    try:
-        link = _asyncio.run(_create_link())
-        return jsonify({"success": True, "invoice_link": link, "stars": stars})
-    except Exception as exc:
-        logger.warning(f"create_invoice_link failed: {exc}")
-        return jsonify({"error": str(exc)}), 500
+@app.route("/api/listings/<int:listing_id>", methods=["GET"])
+def api_get_listing(listing_id):
+    """Get listing details."""
+    listing = get_account(listing_id)
+    if not listing:
+        return jsonify({"success": False, "error": "Listing not found"}), 404
+    
+    return jsonify({
+        "success": True,
+        "listing": _format_listing_public(listing)
+    })
 
 
-# ── Admin API ───────────────────────────────────────────────
-@app.route("/api/admin/accounts", methods=["GET"])
+@app.route("/api/listings/search", methods=["GET"])
+def api_search_listings():
+    """Search listings."""
+    query = request.args.get("q", "").lower()
+    category = request.args.get("category", "")
+    
+    listings = get_all_accounts(status="available")
+    
+    # Simple filter
+    if query:
+        listings = [l for l in listings if query in l["name"].lower() or query in (l.get("description") or "").lower()]
+    if category:
+        listings = [l for l in listings if l.get("category") == category]
+    
+    return jsonify({"listings": [_format_listing_public(l) for l in listings]})
+
+
+# ============================================================
+# USER PROFILE API
+# ============================================================
+
+@app.route("/api/users/<int:user_id>", methods=["GET"])
+def api_get_user(user_id):
+    """Get user profile."""
+    user = get_user(user_id)
+    if not user:
+        return jsonify({"success": False, "error": "User not found"}), 404
+    
+    return jsonify({
+        "success": True,
+        "user": _format_user_public(user)
+    })
+
+
+@app.route("/api/me", methods=["GET"])
+def api_get_current_user():
+    """Get current user profile."""
+    user_data = get_user_from_request()
+    if not user_data:
+        return jsonify({"success": False, "error": "Not authenticated"}), 401
+    
+    user = get_user(user_data.get("id"))
+    if not user:
+        return jsonify({"success": False, "error": "User not found"}), 404
+    
+    return jsonify({"success": True, "user": _format_user_full(user)})
+
+
+@app.route("/api/me", methods=["PUT"])
+def api_update_current_user():
+    """Update current user profile."""
+    user_data = get_user_from_request()
+    if not user_data:
+        return jsonify({"success": False, "error": "Not authenticated"}), 401
+    
+    data = request.get_json(silent=True) or {}
+    
+    update_user(user_data["id"], **{
+        "bio": data.get("bio"),
+        "language": data.get("language"),
+        "currency": data.get("currency"),
+        "notification_enabled": data.get("notification_enabled", True)
+    })
+    
+    user = get_user(user_data["id"])
+    return jsonify({"success": True, "user": _format_user_full(user)})
+
+
+# ============================================================
+# ORDERS API
+# ============================================================
+
+@app.route("/api/orders", methods=["POST"])
+def api_create_order():
+    """Create a new order."""
+    data = request.get_json(silent=True) or {}
+    listing_id = data.get("listing_id")
+    payment_method = data.get("payment_method", "stars")
+    
+    if not listing_id:
+        return jsonify({"success": False, "error": "listing_id is required"}), 400
+    
+    listing = get_account(listing_id)
+    if not listing:
+        return jsonify({"success": False, "error": "Listing not found"}), 404
+    
+    if listing["status"] != "available":
+        return jsonify({"success": False, "error": "Listing not available"}), 409
+    
+    user_data = get_user_from_request()
+    buyer_id = user_data.get("id") if user_data else 0
+    
+    # Calculate commission
+    commission_info = calculate_commission(listing["price"])
+    
+    order_id = create_order(
+        listing_id=listing_id,
+        buyer_id=buyer_id,
+        seller_id=listing["seller_id"],
+        amount=listing["price"],
+        currency=listing.get("currency", "USD"),
+        payment_method=payment_method
+    )
+    
+    # Update listing status to reserved
+    update_account(listing_id, status="reserved")
+    
+    return jsonify({
+        "success": True,
+        "order_id": order_id,
+        "listing": _format_listing_public(listing),
+        "commission": commission_info,
+        "payment_methods": get_payment_methods()
+    }), 201
+
+
+@app.route("/api/orders/<int:order_id>", methods=["GET"])
+def api_get_order(order_id):
+    """Get order details."""
+    order = get_order(order_id)
+    if not order:
+        return jsonify({"success": False, "error": "Order not found"}), 404
+    
+    return jsonify({"success": True, "order": _format_order(order)})
+
+
+@app.route("/api/orders/<int:order_id>/confirm", methods=["POST"])
+def api_confirm_order(order_id):
+    """Confirm order received."""
+    order = get_order(order_id)
+    if not order:
+        return jsonify({"success": False, "error": "Order not found"}), 404
+    
+    update_order(order_id, status="completed")
+    update_account(order["account_id"], status="sold")
+    
+    return jsonify({"success": True, "message": "Order confirmed"})
+
+
+# ============================================================
+# CHATS API
+# ============================================================
+
+@app.route("/api/chats", methods=["GET"])
+def api_get_chats():
+    """Get user's chats."""
+    user_data = get_user_from_request()
+    if not user_data:
+        return jsonify({"success": False, "error": "Not authenticated"}), 401
+    
+    # TODO: Implement chat list from database
+    return jsonify({"success": True, "chats": []})
+
+
+@app.route("/api/chats/<int:chat_id>/messages", methods=["GET"])
+def api_get_chat_messages(chat_id):
+    """Get messages in a chat."""
+    limit = request.args.get("limit", 50, type=int)
+    offset = request.args.get("offset", 0, type=int)
+    
+    messages = get_messages(chat_id, limit=limit, offset=offset)
+    
+    return jsonify({
+        "success": True,
+        "messages": [_format_message(m) for m in messages]
+    })
+
+
+@app.route("/api/chats/<int:chat_id>/messages", methods=["POST"])
+def api_send_message(chat_id):
+    """Send a message."""
+    user_data = get_user_from_request()
+    if not user_data:
+        return jsonify({"success": False, "error": "Not authenticated"}), 401
+    
+    data = request.get_json(silent=True) or {}
+    content = data.get("content", "").strip()
+    receiver_id = data.get("receiver_id")
+    
+    if not content or not receiver_id:
+        return jsonify({"success": False, "error": "Missing fields"}), 400
+    
+    message_id = send_message(
+        chat_id=chat_id,
+        sender_id=user_data["id"],
+        receiver_id=receiver_id,
+        content=content,
+        message_type="text"
+    )
+    
+    return jsonify({
+        "success": True,
+        "message_id": message_id
+    }), 201
+
+
+# ============================================================
+# STATS & MARKETPLACE INFO
+# ============================================================
+
+@app.route("/api/stats", methods=["GET"])
+def api_get_stats():
+    """Get marketplace statistics."""
+    stats = get_marketplace_stats()
+    return jsonify({"success": True, "stats": stats})
+
+
+@app.route("/api/info", methods=["GET"])
+def api_get_info():
+    """Get marketplace information."""
+    from config import MARKETPLACE_NAME, get_payment_info
+    
+    return jsonify({
+        "success": True,
+        "marketplace": {
+            "name": MARKETPLACE_NAME,
+            "payment_info": get_payment_info(),
+            "stats": get_marketplace_stats()
+        }
+    })
+
+
+# ============================================================
+# ADMIN API
+# ============================================================
+
+@app.route("/api/admin/listings", methods=["GET"])
 @admin_required
-def api_admin_get_accounts():
-    return jsonify([_format_account(a) for a in get_all_accounts_admin()])
+def api_admin_get_listings():
+    """Get all listings for admin."""
+    listings = get_all_accounts_admin()
+    return jsonify({"success": True, "listings": [_format_listing_admin(l) for l in listings]})
 
 
-@app.route("/api/admin/accounts", methods=["POST"])
+@app.route("/api/admin/listings", methods=["POST"])
 @admin_required
-def api_admin_create_account():
+def api_admin_create_listing():
+    """Admin create listing."""
     name = request.form.get("name", "").strip()
     if not name:
-        return jsonify({"error": "الاسم مطلوب"}), 400
-
+        return jsonify({"success": False, "error": "Name is required"}), 400
+    
     try:
         price = float(request.form.get("price", 0))
     except (ValueError, TypeError):
-        return jsonify({"error": "السعر غير صحيح"}), 400
-
-    description   = request.form.get("description", "")
-    raw_year      = request.form.get("creation_year")
-    creation_year = int(raw_year) if raw_year and raw_year.isdigit() else None
-    category      = request.form.get("category", "twitter")
-    image_path    = _save_upload(request.files.get("image"))
-    email         = request.form.get("email", "")
-    password      = request.form.get("password", "")
-    followers     = int(request.form.get("followers", 0) or 0)
-    tweets_count  = int(request.form.get("tweets_count", 0) or 0)
-    features      = request.form.get("features", "")
-
-    account_id = add_account(
-        name, description, price, creation_year, category, image_path,
-        email, password, followers, tweets_count, features
+        return jsonify({"success": False, "error": "Invalid price"}), 400
+    
+    image_path = _save_upload(request.files.get("image"))
+    
+    listing_id = add_account(
+        name=name,
+        description=request.form.get("description", ""),
+        price=price,
+        category=request.form.get("category", "other"),
+        image_path=image_path,
+        email=request.form.get("email", ""),
+        password=request.form.get("password", ""),
+        followers=int(request.form.get("followers", 0) or 0),
+        tweets_count=int(request.form.get("tweets_count", 0) or 0),
+        features=request.form.get("features", "")
     )
-    return jsonify({"success": True, "id": account_id}), 201
+    
+    return jsonify({"success": True, "listing_id": listing_id}), 201
 
 
-@app.route("/api/admin/accounts/<int:account_id>", methods=["PUT"])
+@app.route("/api/admin/listings/<int:listing_id>", methods=["PUT"])
 @admin_required
-def api_admin_update_account(account_id):
-    if not get_account(account_id):
-        return jsonify({"error": "Not found"}), 404
-
+def api_admin_update_listing(listing_id):
+    """Admin update listing."""
+    if not get_account(listing_id):
+        return jsonify({"success": False, "error": "Listing not found"}), 404
+    
     updates = {}
-    for field in ["name", "description", "status", "category", "email", "password", "features"]:
+    for field in ["name", "description", "status", "category"]:
         if field in request.form:
             updates[field] = request.form[field]
+    
     if "price" in request.form:
         try:
             updates["price"] = float(request.form["price"])
         except (ValueError, TypeError):
-            return jsonify({"error": "السعر غير صحيح"}), 400
-    for num_field in ["followers", "tweets_count"]:
-        if num_field in request.form:
-            try:
-                updates[num_field] = int(request.form[num_field])
-            except (ValueError, TypeError):
-                pass
-    raw_year = request.form.get("creation_year", "")
-    if raw_year and raw_year.isdigit():
-        updates["creation_year"] = int(raw_year)
-
+            pass
+    
     img = _save_upload(request.files.get("image"))
     if img:
         updates["image_path"] = img
-
-    update_account(account_id, **updates)
+    
+    update_account(listing_id, **updates)
     return jsonify({"success": True})
 
 
-@app.route("/api/admin/accounts/<int:account_id>", methods=["DELETE"])
+@app.route("/api/admin/listings/<int:listing_id>", methods=["DELETE"])
 @admin_required
-def api_admin_delete_account(account_id):
-    if not get_account(account_id):
-        return jsonify({"error": "Not found"}), 404
-    delete_account(account_id)
+def api_admin_delete_listing(listing_id):
+    """Admin delete listing."""
+    if not get_account(listing_id):
+        return jsonify({"success": False, "error": "Listing not found"}), 404
+    
+    delete_account(listing_id)
     return jsonify({"success": True})
 
 
-@app.route("/api/admin/stats", methods=["GET"])
-@admin_required
-def api_admin_stats():
-    return jsonify(get_stats())
+# ============================================================
+# HELPERS
+# ============================================================
 
-
-@app.route("/api/admin/orders", methods=["GET"])
-@admin_required
-def api_admin_orders():
-    return jsonify(get_all_orders())
-
-
-@app.route("/api/admin/orders/<int:order_id>", methods=["PUT"])
-@admin_required
-def api_admin_update_order(order_id):
-    data    = request.get_json(silent=True) or {}
-    status  = data.get("status")
-    allowed = {"pending", "paid", "completed", "cancelled"}
-    if status not in allowed:
-        return jsonify({"error": f"الحالات المتاحة: {sorted(allowed)}"}), 400
-
-    order = get_order(order_id)
-    if not order:
-        return jsonify({"error": "الطلب غير موجود"}), 404
-
-    update_order(order_id, status)
-
-    # If completed, mark account sold and send credentials to buyer
-    if status == "completed":
-        update_account(order["account_id"], status="sold")
-        _send_credentials_async(order)
-    # If cancelled/rejected, restore account to available for resale
-    elif status == "cancelled":
-        update_account(order["account_id"], status="available")
-
-    return jsonify({"success": True})
-
-
-@app.route("/api/admin/upload", methods=["POST"])
-@admin_required
-def api_admin_upload():
-    img = _save_upload(request.files.get("image"))
-    if not img:
-        return jsonify({"error": "لا توجد صورة صالحة"}), 400
-    return jsonify({"success": True, "path": img, "url": _image_url(img)})
-
-
-# ── Helpers ─────────────────────────────────────────────────
 def _image_url(path: Optional[str]) -> str:
+    """Get image URL from path."""
     if not path:
         return ""
     return f"/static/images/accounts/{os.path.basename(path)}"
 
 
-def _format_account_public(a: dict) -> dict:
+def _format_listing_public(listing: dict) -> dict:
+    """Format listing for public view."""
     return {
-        "id":            a["id"],
-        "name":          a["name"],
-        "description":   a["description"],
-        "price":         a["price"],
-        "creation_year": a["creation_year"],
-        "category":      a["category"],
-        "image":         _image_url(a["image_path"]),
-        "status":        a["status"],
-        "followers":     a.get("followers") or 0,
-        "tweets_count":  a.get("tweets_count") or 0,
-        "features":      a.get("features", ""),
-        "created_at":    a["created_at"],
+        "id": listing["id"],
+        "title": listing["name"],
+        "description": listing.get("description", ""),
+        "price": listing["price"],
+        "currency": listing.get("currency", "USD"),
+        "category": listing.get("category", ""),
+        "image": _image_url(listing.get("image_path")),
+        "status": listing.get("status", "available"),
+        "created_at": listing.get("created_at"),
+        "updated_at": listing.get("updated_at")
     }
 
 
-def _format_account(a: dict) -> dict:
+def _format_listing_admin(listing: dict) -> dict:
+    """Format listing for admin view."""
+    public = _format_listing_public(listing)
     return {
-        **_format_account_public(a),
-        "email":      a.get("email", ""),
-        "password":   a.get("password", ""),
-        "updated_at": a["updated_at"],
+        **public,
+        "email": listing.get("email", ""),
+        "password": listing.get("password", ""),
+        "seller_id": listing.get("seller_id")
+    }
+
+
+def _format_user_public(user: dict) -> dict:
+    """Format user for public view."""
+    return {
+        "id": user["id"],
+        "username": user.get("username"),
+        "name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
+        "bio": user.get("bio", ""),
+        "avatar": user.get("avatar_url"),
+        "rating": user.get("rating", 5.0),
+        "followers": user.get("followers", 0),
+        "is_verified": user.get("is_verified", False)
+    }
+
+
+def _format_user_full(user: dict) -> dict:
+    """Format user for full view."""
+    public = _format_user_public(user)
+    return {
+        **public,
+        "email": user.get("email"),
+        "language": user.get("language", "en"),
+        "currency": user.get("currency", "USD"),
+        "completed_sales": user.get("completed_sales", 0),
+        "completed_purchases": user.get("completed_purchases", 0),
+        "created_at": user.get("created_at")
+    }
+
+
+def _format_order(order: dict) -> dict:
+    """Format order."""
+    return {
+        "id": order["id"],
+        "listing_id": order.get("listing_id"),
+        "buyer_id": order.get("buyer_id"),
+        "seller_id": order.get("seller_id"),
+        "status": order.get("status", "pending"),
+        "amount": order.get("amount"),
+        "currency": order.get("currency", "USD"),
+        "payment_method": order.get("payment_method"),
+        "created_at": order.get("created_at"),
+        "paid_at": order.get("paid_at"),
+        "completed_at": order.get("completed_at")
+    }
+
+
+def _format_message(message: dict) -> dict:
+    """Format message."""
+    return {
+        "id": message["id"],
+        "sender_id": message.get("sender_id"),
+        "content": message.get("content"),
+        "type": message.get("message_type", "text"),
+        "is_read": message.get("is_read", False),
+        "created_at": message.get("created_at"),
+        "read_at": message.get("read_at")
     }
 
 
 def _save_upload(file_storage) -> Optional[str]:
+    """Save uploaded file."""
     if not file_storage or file_storage.filename == "":
         return None
     if not allowed_file(file_storage.filename):
         return None
+    
     filename = secure_filename(file_storage.filename)
     filename = f"{int(time.time())}_{filename}"
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     file_storage.save(filepath)
+    
     return filepath
 
 
-def _notify_admin_async(order_id, account, buyer_id, buyer_username) -> None:
-    import threading, asyncio
-    from config import BOT_TOKEN, ADMIN_ID, ADMIN_USERNAME
+# ============================================================
+# ERROR HANDLERS
+# ============================================================
 
-    if not BOT_TOKEN:
-        return
-
-    def _run():
-        try:
-            from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
-            kb = InlineKeyboardMarkup([[
-                InlineKeyboardButton("✅ تأكيد الدفع", callback_data=f"admin_confirm_order_{order_id}"),
-                InlineKeyboardButton("❌ رفض",         callback_data=f"admin_reject_order_{order_id}"),
-            ]])
-            msg = (
-                f"🆕 <b>طلب جديد #{order_id}</b>\n\n"
-                f"📦 {account['name']}\n"
-                f"💰 ${account['price']:.2f}\n"
-                f"👤 @{buyer_username} (ID: <code>{buyer_id}</code>)"
-            )
-            asyncio.run(Bot(BOT_TOKEN).send_message(
-                chat_id=ADMIN_ID, text=msg, parse_mode="HTML",
-                reply_markup=kb
-            ))
-        except Exception as exc:
-            logger.warning(f"Admin notification failed: {exc}")
-
-    threading.Thread(target=_run, daemon=True).start()
+@app.errorhandler(404)
+def not_found(error):
+    """Handle 404 errors."""
+    return jsonify({"success": False, "error": "Not found"}), 404
 
 
-def _send_credentials_async(order: dict) -> None:
-    import threading, asyncio
-    from config import BOT_TOKEN, ADMIN_USERNAME
+@app.errorhandler(500)
+def server_error(error):
+    """Handle 500 errors."""
+    logger.error(f"Server error: {error}")
+    return jsonify({"success": False, "error": "Internal server error"}), 500
 
-    if not BOT_TOKEN or not order.get("buyer_id"):
-        return
 
-    def _run():
-        try:
-            from telegram import Bot
-            from database import get_account as _get_account
-            acc = _get_account(order["account_id"])
-            if not acc:
-                return
-            email    = acc.get("email") or "—"
-            password = acc.get("password") or "—"
-            features = acc.get("features") or ""
-            msg = (
-                f"🎉 <b>مبروك! تم تأكيد دفعك</b>\n\n"
-                f"📦 الحساب: <b>{acc['name']}</b>\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🔐 <b>بيانات دخول حسابك:</b>\n\n"
-                f"📧 الإيميل:  <code>{email}</code>\n"
-                f"🔑 الباسورد: <code>{password}</code>\n\n"
-            )
-            if features:
-                msg += f"⭐ المميزات: {features}\n\n"
-            msg += (
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"📞 للدعم: <a href=\"https://t.me/{ADMIN_USERNAME}\">@{ADMIN_USERNAME}</a>\n\n"
-                "✨ <i>شكراً لثقتك بنا!</i>"
-            )
-            asyncio.run(Bot(BOT_TOKEN).send_message(
-                chat_id=order["buyer_id"], text=msg, parse_mode="HTML"
-            ))
-        except Exception as exc:
-            logger.warning(f"Credentials delivery failed: {exc}")
-
-    threading.Thread(target=_run, daemon=True).start()
+if __name__ == "__main__":
+    app.run(debug=False)

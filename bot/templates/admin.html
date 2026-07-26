@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>𝕏 لوحة التحكم</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:#0d1117; --surface:#161b22; --surface2:#21262d;
+      --border:#30363d; --accent:#1d9bf0; --accent2:#8b5cf6;
+      --green:#3fb950; --red:#f85149; --yellow:#f0a519;
+      --text:#e6edf3; --muted:#7d8590;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+    .hidden{display:none!important;}
+    input,textarea,select{padding:10px 12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:14px;outline:none;direction:rtl;transition:border-color .2s;width:100%;}
+    input:focus,textarea:focus,select:focus{border-color:var(--accent);}
+    textarea{min-height:80px;resize:vertical;}
+    label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;}
+
+    /* Login */
+    .login-overlay{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px;}
+    .login-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:32px;width:100%;max-width:360px;text-align:center;}
+    .logo-x{font-size:52px;font-weight:900;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px;}
+    .login-title{font-size:20px;font-weight:900;margin-bottom:4px;}
+    .login-sub{font-size:13px;color:var(--muted);margin-bottom:24px;}
+    .login-err{color:var(--red);font-size:12px;margin-bottom:10px;min-height:18px;}
+    .btn-primary{width:100%;padding:13px;background:linear-gradient(135deg,var(--accent),#0ea5e9);color:#fff;border:none;border-radius:12px;font-family:inherit;font-size:15px;font-weight:800;cursor:pointer;transition:transform .15s;}
+    .btn-primary:hover{transform:translateY(-1px);}
+    .btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+
+    /* Shell */
+    .shell{display:flex;min-height:100vh;}
+    .sidebar{width:56px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:4px;position:fixed;right:0;top:0;bottom:0;z-index:50;transition:width .3s;}
+    .sidebar.expanded{width:210px;}
+    .sidebar-logo{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:#fff;margin-bottom:8px;flex-shrink:0;}
+    .nav-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:var(--muted);width:100%;transition:all .2s;white-space:nowrap;overflow:hidden;}
+    .nav-item:hover{background:var(--surface2);color:var(--text);}
+    .nav-item.active{background:rgba(29,155,240,.12);color:var(--accent);}
+    .nav-icon{font-size:18px;flex-shrink:0;width:24px;text-align:center;}
+    .nav-label{opacity:0;transition:opacity .2s;}
+    .sidebar.expanded .nav-label{opacity:1;}
+
+    .main{flex:1;margin-right:56px;padding:0;}
+    .top-bar{background:rgba(13,17,23,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40;}
+    .top-bar-title{font-size:16px;font-weight:900;}
+    .btn-sm{padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;}
+    .btn-sm:hover{border-color:var(--accent);color:var(--accent);}
+    .btn-sm.danger:hover{border-color:var(--red);color:var(--red);}
+    .btn-sm.success{border-color:var(--green);color:var(--green);}
+    .btn-sm.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+    .btn-sm.primary:hover{background:#0ea5e9;}
+
+    .page{padding:20px;display:none;}
+    .page.active{display:block;}
+
+    /* Stats cards */
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-bottom:20px;}
+    .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center;}
+    .stat-num{font-size:26px;font-weight:900;color:var(--accent);margin-bottom:4px;}
+    .stat-lbl{font-size:11px;color:var(--muted);font-weight:700;}
+
+    /* Table */
+    .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+    .table-hdr{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+    .table-hdr-title{font-size:15px;font-weight:900;}
+    table{width:100%;border-collapse:collapse;}
+    th,td{padding:11px 16px;text-align:right;font-size:13px;}
+    th{background:var(--surface2);color:var(--muted);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.5px;}
+    td{border-top:1px solid var(--border);}
+    tr:hover td{background:rgba(255,255,255,.015);}
+    .acc-img{width:38px;height:38px;border-radius:8px;object-fit:cover;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:18px;}
+    .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+    .badge-available{background:rgba(63,185,80,.12);color:var(--green);}
+    .badge-sold{background:rgba(248,81,73,.12);color:var(--red);}
+    .badge-reserved,.badge-pending{background:rgba(240,165,25,.12);color:var(--yellow);}
+    .badge-completed{background:rgba(63,185,80,.12);color:var(--green);}
+    .badge-cancelled{background:rgba(248,81,73,.12);color:var(--red);}
+    .badge-active{background:rgba(63,185,80,.12);color:var(--green);}
+    .badge-ended{background:rgba(125,133,144,.12);color:var(--muted);}
+    .td-actions{display:flex;gap:6px;flex-wrap:wrap;}
+
+    /* Form */
+    .form-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:680px;}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+    @media(max-width:600px){.form-grid{grid-template-columns:1fr;}}
+    .fg{display:flex;flex-direction:column;gap:5px;}
+    .fg.full{grid-column:1/-1;}
+    .form-actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;}
+    .img-preview{width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:8px;display:none;}
+
+    /* Modal */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .25s;}
+    .modal-overlay.open{opacity:1;pointer-events:all;}
+    .modal-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;width:100%;max-width:500px;transform:translateY(20px);transition:transform .3s;}
+    .modal-overlay.open .modal-box{transform:translateY(0);}
+    .modal-title{font-size:16px;font-weight:900;margin-bottom:16px;}
+
+    /* Toast */
+    .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 20px;font-size:13px;font-weight:700;z-index:500;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+    /* Progress bar */
+    .progress-wrap{background:var(--surface2);border-radius:4px;height:6px;overflow:hidden;margin-top:4px;}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:4px;transition:width .6s;}
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-card">
+    <div class="logo-x">𝕏</div>
+    <div class="login-title">لوحة التحكم</div>
+    <div class="login-sub">أدخل كلمة المرور للوصول</div>
+    <div class="login-err" id="loginErr"></div>
+    <input type="password" id="loginPass" placeholder="كلمة المرور" style="margin-bottom:12px" onkeydown="if(event.key==='Enter')doLogin()"/>
+    <button class="btn-primary" onclick="doLogin()">دخول</button>
+  </div>
+</div>
+
+<!-- Shell -->
+<div class="shell hidden" id="adminShell">
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-logo" style="cursor:pointer" onclick="toggleSidebar()">𝕏</div>
+    <div class="nav-item active" data-page="dashboard">
+      <span class="nav-icon">📊</span><span class="nav-label">الرئيسية</span>
+    </div>
+    <div class="nav-item" data-page="accounts">
+      <span class="nav-icon">🐦</span><span class="nav-label">الحسابات</span>
+    </div>
+    <div class="nav-item" data-page="competitions">
+      <span class="nav-icon">🏆</span><span class="nav-label">المسابقات</span>
+    </div>
+    <div class="nav-item" data-page="orders">
+      <span class="nav-icon">📦</span><span class="nav-label">الطلبات</span>
+    </div>
+    <div class="nav-item" data-page="users">
+      <span class="nav-icon">👥</span><span class="nav-label">المستخدمون</span>
+    </div>
+    <div class="nav-item" data-page="add-account" style="margin-top:auto">
+      <span class="nav-icon">➕</span><span class="nav-label">إضافة حساب</span>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="top-bar">
+      <div class="top-bar-title" id="pageTitle">الرئيسية</div>
+      <button class="btn-sm" onclick="doLogout()">خروج</button>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="page active" id="page-dashboard">
+      <div class="stats-grid" id="statsGrid"></div>
+    </div>
+
+    <!-- Accounts -->
+    <div class="page" id="page-accounts">
+      <div class="table-wrap">
+        <div class="table-hdr">
+          <div class="table-hdr-title">الحسابات</div>
+          <button class="btn-sm primary" onclick="showPage('add-account')">➕ إضافة</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>الصورة</th><th>الاسم</th><th>السنة</th><th>السعر</th><th>المتابعون</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+            <tbody id="accountsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Competitions -->
+    <div class="page" id="page-competitions">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:16px;font-weight:900">المسابقات</div>
+        <button class="btn-sm primary" onclick="showAddCompModal()">➕ إضافة مسابقة</button>
+      </div>
+      <div class="table-wrap">
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>الصورة</th><th>العنوان</th><th>الدعوات</th><th>المشاركون</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+            <tbody id="compsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders -->
+    <div class="page" id="page-orders">
+      <div class="table-wrap">
+        <div class="table-hdr"><div class="table-hdr-title">الطلبات</div></div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>#</th><th>الحساب</th><th>المشتري</th><th>الحالة</th><th>التاريخ</th><th>إجراءات</th></tr></thead>
+            <tbody id="ordersTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Users -->
+    <div class="page" id="page-users">
+      <div class="table-wrap">
+        <div class="table-hdr"><div class="table-hdr-title">المستخدمون</div></div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>المعرف</th><th>الاسم</th><th>اليوزر</th><th>إجمالي الدعوات</th><th>تاريخ الانضمام</th></tr></thead>
+            <tbody id="usersTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add/Edit Account -->
+    <div class="page" id="page-add-account">
+      <div class="form-card">
+        <div style="font-size:16px;font-weight:900;margin-bottom:18px" id="formTitle">➕ إضافة حساب</div>
+        <input type="hidden" id="editAccId"/>
+        <div class="form-grid">
+          <div class="fg full"><label>اسم الحساب *</label><input type="text" id="accName" placeholder="@TwitterHandle"/></div>
+          <div class="fg"><label>سنة الإنشاء</label><input type="number" id="accYear" placeholder="2010" min="2006" max="2025"/></div>
+          <div class="fg"><label>السعر ($) *</label><input type="number" id="accPrice" placeholder="25.00" step="0.01" min="0"/></div>
+          <div class="fg"><label>الإيميل</label><input type="email" id="accEmail" placeholder="user@example.com"/></div>
+          <div class="fg"><label>الباسورد</label><input type="text" id="accPassword" placeholder="كلمة المرور"/></div>
+          <div class="fg"><label>المتابعون</label><input type="number" id="accFollowers" placeholder="1500" min="0"/></div>
+          <div class="fg"><label>التغريدات</label><input type="number" id="accTweets" placeholder="500" min="0"/></div>
+          <div class="fg full"><label>المميزات (مفصولة بفواصل)</label><input type="text" id="accFeatures" placeholder="حساب قديم، تغريدات أصلية"/></div>
+          <div class="fg full"><label>الوصف</label><textarea id="accDesc" placeholder="وصف الحساب..."></textarea></div>
+          <div class="fg full">
+            <label>صورة الحساب</label>
+            <input type="file" id="accImage" accept="image/*" onchange="previewImg(this,'accImgPreview')"/>
+            <img id="accImgPreview" class="img-preview"/>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn-primary" style="padding:11px 24px" onclick="saveAccount()">💾 حفظ</button>
+          <button class="btn-sm" onclick="showPage('accounts')">إلغاء</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Account Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal-box">
+    <div class="modal-title">✏️ تعديل الحساب</div>
+    <input type="hidden" id="editModalId"/>
+    <div class="form-grid">
+      <div class="fg full"><label>الاسم</label><input type="text" id="em_name"/></div>
+      <div class="fg"><label>السعر ($)</label><input type="number" id="em_price" step="0.01"/></div>
+      <div class="fg"><label>سنة الإنشاء</label><input type="number" id="em_year"/></div>
+      <div class="fg"><label>الإيميل</label><input type="text" id="em_email"/></div>
+      <div class="fg"><label>الباسورد</label><input type="text" id="em_password"/></div>
+      <div class="fg"><label>المتابعون</label><input type="number" id="em_followers"/></div>
+      <div class="fg"><label>التغريدات</label><input type="number" id="em_tweets"/></div>
+      <div class="fg full"><label>المميزات</label><input type="text" id="em_features"/></div>
+      <div class="fg full"><label>الوصف</label><textarea id="em_desc"></textarea></div>
+      <div class="fg full">
+        <label>الحالة</label>
+        <select id="em_status">
+          <option value="available">✅ متاح</option>
+          <option value="sold">🔴 مباع</option>
+          <option value="reserved">⏳ محجوز</option>
+        </select>
+      </div>
+      <div class="fg full">
+        <label>صورة جديدة (اختياري)</label>
+        <input type="file" id="em_image" accept="image/*" onchange="previewImg(this,'em_imgPrev')"/>
+        <img id="em_imgPrev" class="img-preview"/>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-primary" style="padding:11px 24px" onclick="saveEditAccount()">💾 حفظ</button>
+      <button class="btn-sm" onclick="closeModal('editModal')">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Competition Modal -->
+<div class="modal-overlay" id="addCompModal">
+  <div class="modal-box">
+    <div class="modal-title">🏆 إضافة مسابقة</div>
+    <div class="form-grid">
+      <div class="fg full"><label>العنوان *</label><input type="text" id="cm_title" placeholder="اسم المسابقة"/></div>
+      <div class="fg full"><label>الوصف</label><textarea id="cm_desc" placeholder="وصف المسابقة..."></textarea></div>
+      <div class="fg full"><label>عدد الدعوات للفوز *</label><input type="number" id="cm_invites" value="15" min="1"/></div>
+      <div class="fg full">
+        <label>صورة المسابقة</label>
+        <input type="file" id="cm_image" accept="image/*" onchange="previewImg(this,'cm_imgPrev')"/>
+        <img id="cm_imgPrev" class="img-preview"/>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-primary" style="padding:11px 24px" onclick="saveCompetition()">✅ إنشاء</button>
+      <button class="btn-sm" onclick="closeModal('addCompModal')">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- Leaderboard Modal -->
+<div class="modal-overlay" id="leaderboardModal">
+  <div class="modal-box">
+    <div class="modal-title">🏅 المتصدرون</div>
+    <div id="leaderboardContent"></div>
+    <div class="form-actions" style="margin-top:16px">
+      <button class="btn-sm" onclick="closeModal('leaderboardModal')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if(tg){tg.ready();tg.expand();}
+
+// ── Auth ──────────────────────────────────────
+async function checkAuth(){
+  // Try Telegram initData first
+  if(tg?.initData){
+    const resp = await fetch('/api/admin/check',{headers:{'X-Init-Data':tg.initData}});
+    const data = await resp.json();
+    if(data.authed){ showShell(); return; }
+  }
+  // Try session
+  const resp = await fetch('/api/admin/check');
+  const data = await resp.json();
+  if(data.authed) showShell();
+}
+
+async function doLogin(){
+  const pass = document.getElementById('loginPass').value.trim();
+  if(!pass) return;
+  const btn = document.querySelector('.login-card .btn-primary');
+  btn.disabled = true; btn.textContent = '...';
+  const resp = await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})});
+  const data = await resp.json();
+  if(data.success){ showShell(); }
+  else {
+    document.getElementById('loginErr').textContent = data.error || 'خطأ';
+    btn.disabled = false; btn.textContent = 'دخول';
+  }
+}
+document.getElementById('loginPass').addEventListener('keydown', e=>{if(e.key==='Enter')doLogin();});
+
+async function doLogout(){
+  await fetch('/api/admin/logout',{method:'POST'});
+  location.reload();
+}
+
+function showShell(){
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.getElementById('adminShell').classList.remove('hidden');
+  loadDashboard();
+  loadAccounts();
+}
+
+// ── Navigation ────────────────────────────────
+let currentPage = 'dashboard';
+function showPage(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+name)?.classList.add('active');
+  document.querySelector(`[data-page="${name}"]`)?.classList.add('active');
+  const titles={dashboard:'الرئيسية',accounts:'الحسابات',competitions:'المسابقات',orders:'الطلبات',users:'المستخدمون','add-account':'إضافة حساب'};
+  document.getElementById('pageTitle').textContent = titles[name]||name;
+  currentPage = name;
+  if(name==='orders')       loadOrders();
+  if(name==='users')        loadUsers();
+  if(name==='competitions') loadCompetitions();
+  if(name==='add-account')  resetAddForm();
+}
+
+document.querySelectorAll('.nav-item').forEach(el=>{
+  el.addEventListener('click',()=>showPage(el.dataset.page));
+});
+
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('expanded');
+}
+
+// ── Dashboard ─────────────────────────────────
+async function loadDashboard(){
+  const resp = await fetch('/api/admin/stats');
+  const s    = await resp.json();
+  const grid = document.getElementById('statsGrid');
+  grid.innerHTML = [
+    [s.total_accounts,'📦','الحسابات','--accent'],
+    [s.available,'✅','متاح','--green'],
+    [s.sold,'🔴','مباع','--red'],
+    [`$${s.revenue?.toFixed(2)||0}`,'💰','الإيرادات','--yellow'],
+    [s.pending_orders,'⏳','طلبات معلقة','--yellow'],
+    [s.total_users,'👥','المستخدمون','--accent2'],
+    [s.active_competitions,'🏆','مسابقات نشطة','--green'],
+  ].map(([v,i,l,c])=>`<div class="stat-card"><div class="stat-num" style="color:var(${c})">${v}</div><div class="stat-lbl">${i} ${l}</div></div>`).join('');
+}
+
+// ── Accounts ──────────────────────────────────
+let accountsData = [];
+async function loadAccounts(){
+  const resp = await fetch('/api/admin/accounts');
+  accountsData = await resp.json();
+  renderAccounts();
+}
+
+function renderAccounts(){
+  const tbody = document.getElementById('accountsTbody');
+  if(!accountsData.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">لا توجد حسابات</td></tr>';return;}
+  tbody.innerHTML = accountsData.map(a=>{
+    const img = a.image
+      ? `<img src="${esc(a.image)}" style="width:38px;height:38px;border-radius:8px;object-fit:cover"/>`
+      : `<div class="acc-img">𝕏</div>`;
+    return `<tr>
+      <td>${img}</td>
+      <td><div style="font-weight:700">${esc(a.name)}</div><div style="font-size:11px;color:var(--muted)">${esc(a.email||'')}</div></td>
+      <td>${a.creation_year||'—'}</td>
+      <td style="font-weight:700;color:var(--accent)">$${Number(a.price).toFixed(2)}</td>
+      <td>${fmtNum(a.followers)}</td>
+      <td><span class="badge badge-${a.status}">${statusLabel(a.status)}</span></td>
+      <td><div class="td-actions">
+        <button class="btn-sm" onclick="editAccount(${a.id})">✏️</button>
+        <button class="btn-sm danger" onclick="deleteAccount(${a.id})">🗑️</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function resetAddForm(){
+  document.getElementById('editAccId').value = '';
+  document.getElementById('formTitle').textContent = '➕ إضافة حساب';
+  ['accName','accYear','accPrice','accEmail','accPassword','accFollowers','accTweets','accFeatures','accDesc'].forEach(id=>{
+    document.getElementById(id).value='';
+  });
+  document.getElementById('accImage').value='';
+  document.getElementById('accImgPreview').style.display='none';
+}
+
+function editAccount(id){
+  const a = accountsData.find(x=>x.id===id);
+  if(!a) return;
+  document.getElementById('editModalId').value = id;
+  document.getElementById('em_name').value      = a.name||'';
+  document.getElementById('em_price').value     = a.price||0;
+  document.getElementById('em_year').value      = a.creation_year||'';
+  document.getElementById('em_email').value     = a.email||'';
+  document.getElementById('em_password').value  = a.password||'';
+  document.getElementById('em_followers').value = a.followers||0;
+  document.getElementById('em_tweets').value    = a.tweets_count||0;
+  document.getElementById('em_features').value  = a.features||'';
+  document.getElementById('em_desc').value      = a.description||'';
+  document.getElementById('em_status').value    = a.status||'available';
+  document.getElementById('em_imgPrev').style.display = a.image ? 'block':'none';
+  if(a.image) document.getElementById('em_imgPrev').src = a.image;
+  openModal('editModal');
+}
+
+async function saveEditAccount(){
+  const id  = document.getElementById('editModalId').value;
+  const fd  = new FormData();
+  const map = {name:'em_name',price:'em_price',creation_year:'em_year',email:'em_email',password:'em_password',followers:'em_followers',tweets_count:'em_tweets',features:'em_features',description:'em_desc',status:'em_status'};
+  for(const[field,elid] of Object.entries(map)){
+    const v = document.getElementById(elid).value.trim();
+    if(v!=='') fd.append(field, v);
+  }
+  const imgFile = document.getElementById('em_image').files[0];
+  if(imgFile) fd.append('image', imgFile);
+  const resp = await fetch(`/api/admin/accounts/${id}`,{method:'PUT',body:fd});
+  const data = await resp.json();
+  if(data.success){ closeModal('editModal'); showToast('✅ تم التحديث'); await loadAccounts(); }
+  else showToast('❌ '+(data.error||'خطأ'));
+}
+
+async function saveAccount(){
+  const fd = new FormData();
+  fd.append('name',        document.getElementById('accName').value.trim());
+  fd.append('price',       document.getElementById('accPrice').value||0);
+  fd.append('creation_year', document.getElementById('accYear').value||'');
+  fd.append('email',       document.getElementById('accEmail').value.trim());
+  fd.append('password',    document.getElementById('accPassword').value.trim());
+  fd.append('followers',   document.getElementById('accFollowers').value||0);
+  fd.append('tweets_count',document.getElementById('accTweets').value||0);
+  fd.append('features',    document.getElementById('accFeatures').value.trim());
+  fd.append('description', document.getElementById('accDesc').value.trim());
+  const imgFile = document.getElementById('accImage').files[0];
+  if(imgFile) fd.append('image', imgFile);
+  const resp = await fetch('/api/admin/accounts',{method:'POST',body:fd});
+  const data = await resp.json();
+  if(data.success||data.id){ showToast('✅ تم إضافة الحساب'); await loadAccounts(); showPage('accounts'); }
+  else showToast('❌ '+(data.error||'خطأ'));
+}
+
+async function deleteAccount(id){
+  if(!confirm('حذف هذا الحساب نهائياً؟')) return;
+  const resp = await fetch(`/api/admin/accounts/${id}`,{method:'DELETE'});
+  const data = await resp.json();
+  if(data.success){ showToast('✅ تم الحذف'); await loadAccounts(); }
+  else showToast('❌ '+(data.error||'خطأ'));
+}
+
+// ── Competitions ──────────────────────────────
+let compsData = [];
+async function loadCompetitions(){
+  const resp = await fetch('/api/admin/competitions');
+  compsData = await resp.json();
+  const tbody = document.getElementById('compsTbody');
+  if(!compsData.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">لا توجد مسابقات</td></tr>';return;}
+  tbody.innerHTML = compsData.map(c=>{
+    const img = c.image
+      ? `<img src="${esc(c.image)}" style="width:48px;height:38px;border-radius:8px;object-fit:cover"/>`
+      : `<div style="width:48px;height:38px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center">🏆</div>`;
+    return `<tr>
+      <td>${img}</td>
+      <td style="font-weight:700">${esc(c.title)}</td>
+      <td>🎯 ${c.required_invites}</td>
+      <td>👥 ${c.participants||0}</td>
+      <td><span class="badge badge-${c.status}">${c.status==='active'?'🟢 نشطة':'⚫ منتهية'}</span></td>
+      <td><div class="td-actions">
+        <button class="btn-sm" onclick="showLeaderboard(${c.id})">🏅</button>
+        ${c.status==='active'?`<button class="btn-sm success" onclick="endComp(${c.id})">🏁 إنهاء</button>`:''}
+        <button class="btn-sm danger" onclick="deleteComp(${c.id})">🗑️</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function showAddCompModal(){ openModal('addCompModal'); }
+
+async function saveCompetition(){
+  const fd = new FormData();
+  fd.append('title',            document.getElementById('cm_title').value.trim());
+  fd.append('description',      document.getElementById('cm_desc').value.trim());
+  fd.append('required_invites', document.getElementById('cm_invites').value||15);
+  const imgFile = document.getElementById('cm_image').files[0];
+  if(imgFile) fd.append('image', imgFile);
+  const resp = await fetch('/api/admin/competitions',{method:'POST',body:fd});
+  const data = await resp.json();
+  if(data.success||data.id){ closeModal('addCompModal'); showToast('✅ تم إنشاء المسابقة'); loadCompetitions(); }
+  else showToast('❌ '+(data.error||'خطأ'));
+}
+
+async function endComp(id){
+  if(!confirm('إنهاء هذه المسابقة وإعلان الفائز؟')) return;
+  const resp = await fetch(`/api/admin/competitions/${id}/end`,{method:'POST'});
+  const data = await resp.json();
+  if(data.success){ showToast(`✅ انتهت المسابقة${data.winner_id?' — تم إشعار الفائز':''}`); loadCompetitions(); }
+  else showToast('❌ '+(data.error||'خطأ'));
+}
+
+async function deleteComp(id){
+  if(!confirm('حذف هذه المسابقة ومشاركيها نهائياً؟')) return;
+  const resp = await fetch(`/api/admin/competitions/${id}`,{method:'DELETE'});
+  const data = await resp.json();
+  if(data.success){ showToast('✅ تم الحذف'); loadCompetitions(); }
+}
+
+async function showLeaderboard(compId){
+  const resp = await fetch(`/api/admin/competitions/${compId}/leaderboard`);
+  const data = await resp.json();
+  const medals = ['🥇','🥈','🥉'];
+  const comp = compsData.find(c=>c.id===compId);
+  const req  = comp?.required_invites||15;
+  const html = data.length ? data.map((row,i)=>{
+    const name = esc(row.first_name||row.username||`User${row.user_id}`);
+    const pct  = Math.min(Math.round(row.invite_count/req*100),100);
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <span style="font-size:16px">${medals[i]||`${i+1}.`}</span>
+        <span style="font-weight:700">${name}</span>
+        <span style="margin-right:auto;font-size:13px;color:var(--accent)">${row.invite_count}/${req}</span>
+      </div>
+      <div class="progress-wrap"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('') : '<div style="text-align:center;color:var(--muted);padding:20px">لا يوجد مشاركون</div>';
+  document.getElementById('leaderboardContent').innerHTML = html;
+  openModal('leaderboardModal');
+}
+
+// ── Orders ────────────────────────────────────
+async function loadOrders(){
+  const resp = await fetch('/api/admin/orders');
+  const data = await resp.json();
+  const tbody = document.getElementById('ordersTbody');
+  if(!data.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">لا توجد طلبات</td></tr>';return;}
+  tbody.innerHTML = data.map(o=>`<tr>
+    <td>#${o.id}</td>
+    <td>${esc(o.account_name||'—')}</td>
+    <td>@${esc(o.buyer_username||'—')}</td>
+    <td><span class="badge badge-${o.status}">${statusLabelOrder(o.status)}</span></td>
+    <td style="font-size:12px;color:var(--muted)">${(o.created_at||'').substring(0,10)}</td>
+    <td><div class="td-actions">
+      ${o.status==='pending'?`<button class="btn-sm success" onclick="updateOrder(${o.id},'completed')">✅ تأكيد</button>
+       <button class="btn-sm danger" onclick="updateOrder(${o.id},'cancelled')">❌ رفض</button>`:''}
+    </div></td>
+  </tr>`).join('');
+}
+
+async function updateOrder(id, status){
+  const resp = await fetch(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+  const data = await resp.json();
+  if(data.success){ showToast('✅ تم التحديث'); loadOrders(); }
+}
+
+// ── Users ─────────────────────────────────────
+async function loadUsers(){
+  const resp = await fetch('/api/admin/users');
+  const data = await resp.json();
+  const tbody = document.getElementById('usersTbody');
+  if(!data.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">لا يوجد مستخدمون</td></tr>';return;}
+  tbody.innerHTML = data.map(u=>`<tr>
+    <td style="font-family:monospace;font-size:12px">${u.telegram_id}</td>
+    <td style="font-weight:700">${esc(u.first_name||'—')}</td>
+    <td style="color:var(--muted)">@${esc(u.username||'—')}</td>
+    <td style="font-weight:700;color:var(--accent)">${u.total_invites||0} 🔗</td>
+    <td style="font-size:12px;color:var(--muted)">${(u.joined_at||'').substring(0,10)}</td>
+  </tr>`).join('');
+}
+
+// ── Helpers ───────────────────────────────────
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(el=>{
+  el.addEventListener('click',e=>{ if(e.target===el) el.classList.remove('open'); });
+});
+
+function previewImg(input, previewId){
+  const file = input.files[0];
+  const prev = document.getElementById(previewId);
+  if(file){ const reader=new FileReader(); reader.onload=e=>{prev.src=e.target.result;prev.style.display='block';}; reader.readAsDataURL(file); }
+  else { prev.style.display='none'; }
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtNum(n){ n=parseInt(n||0); if(n>=1e6)return(n/1e6).toFixed(1)+'M'; if(n>=1e3)return(n/1e3).toFixed(1)+'K'; return n?String(n):'—'; }
+function statusLabel(s){ return {available:'✅ متاح',sold:'🔴 مباع',reserved:'⏳ محجوز'}[s]||s; }
+function statusLabelOrder(s){ return {pending:'⏳ معلق',completed:'✅ مكتمل',cancelled:'❌ ملغي'}[s]||s; }
+function showToast(msg,dur=3000){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),dur); }
+
+// ── Init ──────────────────────────────────────
+checkAuth();
+</script>
+</body>
+</html>

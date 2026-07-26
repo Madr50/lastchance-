@@ -22,7 +22,8 @@ def shop_url(path: str = "") -> str:
 
 def _webapp(path: str) -> Optional[WebAppInfo]:
     url = shop_url(path)
-    return WebAppInfo(url=url) if url else None
+    # WebApp requires HTTPS; fall back to None for HTTP
+    return WebAppInfo(url=url) if (url and url.startswith("https://")) else None
 
 
 def usd_to_stars(price_usd: float) -> int:
@@ -34,13 +35,17 @@ def usd_to_stars(price_usd: float) -> int:
 #  MAIN MENU
 # ══════════════════════════════════════════════
 def main_menu_keyboard() -> InlineKeyboardMarkup:
-    wa = _webapp("/")
+    wa   = _webapp("/")
+    base = get_webapp_base()
     admin_username = os.environ.get("ADMIN_USERNAME", "l825h")
-    shop_btn = (
-        InlineKeyboardButton("🛒  تصفح الحسابات", web_app=wa)
-        if wa else
-        InlineKeyboardButton("🛒  تصفح الحسابات", callback_data="browse_accounts")
-    )
+
+    if wa:
+        shop_btn = InlineKeyboardButton("🛒  تصفح الحسابات", web_app=wa)
+    elif base:
+        shop_btn = InlineKeyboardButton("🛒  تصفح الحسابات", url=base + "/")
+    else:
+        shop_btn = InlineKeyboardButton("🛒  تصفح الحسابات", callback_data="browse_accounts")
+
     return InlineKeyboardMarkup([
         [shop_btn],
         [
@@ -62,12 +67,19 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
 #  ADMIN KEYBOARD
 # ══════════════════════════════════════════════
 def admin_keyboard() -> InlineKeyboardMarkup:
-    wa = _webapp("/admin")
-    panel_btn = (
-        InlineKeyboardButton("🖥️  لوحة التحكم الكاملة", web_app=wa)
-        if wa else
-        InlineKeyboardButton("🖥️  لوحة التحكم الكاملة", callback_data="noop")
-    )
+    wa   = _webapp("/admin")
+    base = get_webapp_base()
+
+    if wa:
+        # HTTPS → full Telegram WebApp
+        panel_btn = InlineKeyboardButton("🖥️  لوحة التحكم الكاملة", web_app=wa)
+    elif base:
+        # HTTP (EC2 بدون SSL) → URL button يفتح المتصفح
+        panel_btn = InlineKeyboardButton("🖥️  لوحة التحكم الكاملة 🌐", url=base + "/admin")
+    else:
+        # لا يوجد رابط → أضف WEBAPP_URL في السيكريتس
+        panel_btn = InlineKeyboardButton("⚙️  اضبط WEBAPP_URL لفتح اللوحة", callback_data="admin_no_url")
+
     return InlineKeyboardMarkup([
         [panel_btn],
         [
@@ -101,15 +113,39 @@ def back_to_admin_keyboard() -> InlineKeyboardMarkup:
 
 
 # ══════════════════════════════════════════════
+#  INVITE LINK KEYBOARD  (جديد)
+# ══════════════════════════════════════════════
+def invite_keyboard(link: str) -> InlineKeyboardMarkup:
+    """Keyboard shown with the personal invite link — includes a share button."""
+    rows = []
+    if link and link.startswith("http"):
+        import urllib.parse
+        share_text = urllib.parse.quote("🎁 انضم لمتجر ريبر X عبر رابطي الخاص!")
+        share_link = urllib.parse.quote(link)
+        rows.append([
+            InlineKeyboardButton(
+                "📤  مشاركة الرابط",
+                url=f"https://t.me/share/url?url={share_link}&text={share_text}"
+            )
+        ])
+    rows.append([InlineKeyboardButton("🔙  القائمة الرئيسية", callback_data="back_menu")])
+    return InlineKeyboardMarkup(rows)
+
+
+# ══════════════════════════════════════════════
 #  ACCOUNT CARD (user)
 # ══════════════════════════════════════════════
 def account_card_keyboard(acc_id: int, page: int = 0) -> InlineKeyboardMarkup:
-    wa = _webapp(f"/?account={acc_id}")
-    view_btn = (
-        InlineKeyboardButton("🔍  تفاصيل كاملة", web_app=wa)
-        if wa else
-        InlineKeyboardButton("🔍  تفاصيل", callback_data=f"detail_{acc_id}")
-    )
+    wa   = _webapp(f"/?account={acc_id}")
+    base = get_webapp_base()
+
+    if wa:
+        view_btn = InlineKeyboardButton("🔍  تفاصيل كاملة", web_app=wa)
+    elif base:
+        view_btn = InlineKeyboardButton("🔍  تفاصيل كاملة 🌐", url=base + f"/?account={acc_id}")
+    else:
+        view_btn = InlineKeyboardButton("🔍  تفاصيل", callback_data=f"detail_{acc_id}")
+
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🛒  اشتري هذا الحساب", callback_data=f"buy_{acc_id}")],
         [view_btn],

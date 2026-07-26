@@ -27,6 +27,7 @@ from bot_keyboards import (
     accounts_page_keyboard, user_accounts_page_keyboard,
     competitions_keyboard, competition_detail_keyboard, competition_join_keyboard,
     admin_competitions_keyboard, admin_competition_detail_keyboard,
+    invite_keyboard,
     admin_comp_delete_confirm_keyboard, admin_comp_edit_field_keyboard,
     usd_to_stars
 )
@@ -347,7 +348,7 @@ async def cmd_myinvites(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"<i>شارك هذا الرابط — كل من يدخل عبره يُحسب في رصيدك!</i>"
     )
     await update.message.reply_text(
-        text, parse_mode=ParseMode.HTML, reply_markup=main_menu_keyboard()
+        text, parse_mode=ParseMode.HTML, reply_markup=invite_keyboard(link)
     )
 
 
@@ -441,7 +442,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"<code>{link}</code>\n\n"
             f"<i>كل شخص يدخل عبر رابطك يُحسب في رصيدك!</i>"
         )
-        await _safe_edit(query, text, back_to_menu_keyboard())
+        await _safe_edit(query, text, invite_keyboard(link))
         return
 
     # ── Browse accounts (web app fallback) ─────────────────
@@ -1111,7 +1112,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 )
             return
 
-    if data == "noop":
+    if data in ("noop", "admin_no_url"):
         await query.answer("افتح من الرابط الخارجي", show_alert=True)
         return
 

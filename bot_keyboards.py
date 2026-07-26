@@ -338,3 +338,143 @@ def back_button() -> InlineKeyboardMarkup:
 def cancel_button() -> InlineKeyboardMarkup:
     """Simple cancel button."""
     return InlineKeyboardMarkup([[InlineKeyboardButton("❌ إلغاء", callback_data="cancel")]])
+
+
+# ============================================================
+# MISSING FUNCTIONS — required by bot_handlers.py
+# ============================================================
+
+def admin_keyboard() -> InlineKeyboardMarkup:
+    """Admin main menu keyboard (compact, used in bot chat)."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📦 الحسابات", callback_data="admin_list_accounts"),
+            InlineKeyboardButton("📋 الطلبات",  callback_data="admin_list_orders"),
+        ],
+        [
+            InlineKeyboardButton("➕ إضافة حساب", callback_data="admin_add_account"),
+            InlineKeyboardButton("📊 الإحصائيات", callback_data="admin_stats"),
+        ],
+        [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="back_menu")],
+    ])
+
+
+def back_to_menu_keyboard() -> InlineKeyboardMarkup:
+    """Single 'back to menu' button."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="back_menu")]
+    ])
+
+
+def account_card_keyboard(acc_id: int) -> InlineKeyboardMarkup:
+    """Keyboard shown on a single account card for buyers."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🛒 اشتري هذا الحساب", callback_data=f"buy_{acc_id}")],
+        [InlineKeyboardButton("🔙 رجوع",              callback_data="browse_accounts")],
+    ])
+
+
+def admin_account_keyboard(acc_id: int) -> InlineKeyboardMarkup:
+    """Admin actions for a single account."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✏️ تعديل",  callback_data=f"admin_edit_{acc_id}"),
+            InlineKeyboardButton("🗑️ حذف",   callback_data=f"admin_delete_{acc_id}"),
+        ],
+        [
+            InlineKeyboardButton("✅ متاح",   callback_data=f"admin_set_available_{acc_id}"),
+            InlineKeyboardButton("🔴 مباع",   callback_data=f"admin_set_sold_{acc_id}"),
+        ],
+        [InlineKeyboardButton("🔙 رجوع", callback_data="admin_list_accounts")],
+    ])
+
+
+def admin_delete_confirm_keyboard(acc_id: int) -> InlineKeyboardMarkup:
+    """Confirm/cancel delete for an account."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("⚠️ نعم، احذف", callback_data=f"admin_confirm_delete_{acc_id}"),
+            InlineKeyboardButton("❌ إلغاء",      callback_data=f"admin_edit_{acc_id}"),
+        ]
+    ])
+
+
+def admin_edit_field_keyboard(acc_id: int) -> InlineKeyboardMarkup:
+    """Select which field to edit for an account."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📝 الاسم",        callback_data=f"edit_name_{acc_id}"),
+            InlineKeyboardButton("💰 السعر",         callback_data=f"edit_price_{acc_id}"),
+        ],
+        [
+            InlineKeyboardButton("📋 الوصف",        callback_data=f"edit_description_{acc_id}"),
+            InlineKeyboardButton("⭐ المميزات",      callback_data=f"edit_features_{acc_id}"),
+        ],
+        [
+            InlineKeyboardButton("📧 الإيميل",      callback_data=f"edit_email_{acc_id}"),
+            InlineKeyboardButton("🔑 الباسورد",     callback_data=f"edit_password_{acc_id}"),
+        ],
+        [
+            InlineKeyboardButton("👥 المتابعون",    callback_data=f"edit_followers_{acc_id}"),
+            InlineKeyboardButton("🐦 التغريدات",    callback_data=f"edit_tweets_count_{acc_id}"),
+        ],
+        [
+            InlineKeyboardButton("🖼️ الصورة",       callback_data=f"edit_photo_{acc_id}"),
+            InlineKeyboardButton("📅 سنة الإنشاء",  callback_data=f"edit_creation_year_{acc_id}"),
+        ],
+        [InlineKeyboardButton("🔙 رجوع", callback_data=f"admin_view_{acc_id}")],
+    ])
+
+
+def admin_order_keyboard(order_id: int, acc_id: int) -> InlineKeyboardMarkup:
+    """Admin order management keyboard."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ تأكيد الإرسال",  callback_data=f"admin_deliver_{order_id}"),
+            InlineKeyboardButton("❌ إلغاء الطلب",    callback_data=f"admin_cancel_order_{order_id}"),
+        ],
+        [InlineKeyboardButton("🔙 الطلبات",           callback_data="admin_list_orders")],
+    ])
+
+
+def accounts_page_keyboard(chunk: list, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    """Admin paginated accounts list keyboard."""
+    buttons = []
+    for acc in chunk:
+        label = f"[{acc.get('status','?')[:1].upper()}] {acc.get('name','—')[:30]}  ${acc.get('price',0):.0f}"
+        buttons.append([InlineKeyboardButton(label, callback_data=f"admin_view_{acc['id']}")])
+
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("◀️", callback_data=f"admin_page_{page-1}"))
+    nav.append(InlineKeyboardButton(f"📄 {page+1}/{total_pages}", callback_data="noop"))
+    if page < total_pages - 1:
+        nav.append(InlineKeyboardButton("▶️", callback_data=f"admin_page_{page+1}"))
+    if nav:
+        buttons.append(nav)
+
+    buttons.append([
+        InlineKeyboardButton("➕ إضافة حساب", callback_data="admin_add_account"),
+        InlineKeyboardButton("🔙 رجوع",        callback_data="back_menu"),
+    ])
+    return InlineKeyboardMarkup(buttons)
+
+
+def user_accounts_page_keyboard(chunk: list, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    """User-facing paginated accounts list keyboard."""
+    buttons = []
+    for acc in chunk:
+        label = f"🐦 {acc.get('name','—')[:28]}  💰 ${acc.get('price',0):.0f}"
+        buttons.append([InlineKeyboardButton(label, callback_data=f"view_{acc['id']}")])
+
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("◀️", callback_data=f"page_accounts_{page-1}"))
+    nav.append(InlineKeyboardButton(f"📄 {page+1}/{total_pages}", callback_data="noop"))
+    if page < total_pages - 1:
+        nav.append(InlineKeyboardButton("▶️", callback_data=f"page_accounts_{page+1}"))
+    if nav:
+        buttons.append(nav)
+
+    buttons.append([InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="back_menu")])
+    return InlineKeyboardMarkup(buttons)

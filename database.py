@@ -198,7 +198,12 @@ def get_user_by_ref(ref_code: str) -> Optional[dict]:
 def get_all_users() -> list[dict]:
     conn = get_conn()
     rows = conn.execute(
-        "SELECT * FROM users ORDER BY total_invites DESC, joined_at DESC"
+        """SELECT u.*,
+                  u.joined_at AS created_at,
+                  (SELECT COUNT(*) FROM orders o
+                     WHERE o.buyer_id = u.telegram_id AND o.status = 'completed') AS purchase_count
+           FROM users u
+           ORDER BY u.total_invites DESC, u.joined_at DESC"""
     ).fetchall()
     return [dict(r) for r in rows]
 
@@ -317,7 +322,7 @@ def get_order(order_id: int) -> Optional[dict]:
 def get_all_orders() -> list[dict]:
     conn = get_conn()
     rows = conn.execute(
-        """SELECT o.*, a.name as account_name
+        """SELECT o.*, a.name as account_name, a.price as account_price
            FROM orders o LEFT JOIN accounts a ON o.account_id=a.id
            ORDER BY o.created_at DESC"""
     ).fetchall()
@@ -456,6 +461,7 @@ def get_stats() -> dict:
     total     = conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
     available = conn.execute("SELECT COUNT(*) FROM accounts WHERE status='available'").fetchone()[0]
     sold      = conn.execute("SELECT COUNT(*) FROM accounts WHERE status='sold'").fetchone()[0]
+    reserved  = conn.execute("SELECT COUNT(*) FROM accounts WHERE status='reserved'").fetchone()[0]
     revenue   = conn.execute(
         """SELECT COALESCE(SUM(a.price),0) FROM orders o
            JOIN accounts a ON o.account_id=a.id
@@ -468,8 +474,10 @@ def get_stats() -> dict:
 
     return {
         "total_accounts": total,
+        "total":          total,
         "available":      available,
         "sold":           sold,
+        "reserved":       reserved,
         "revenue":        round(float(revenue), 2),
         "pending_orders": pending,
         "total_orders":   total_orders,

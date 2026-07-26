@@ -16,10 +16,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 
 
 def verify_telegram_init_data(init_data: str) -> Optional[dict]:
-    """
-    Validate Telegram WebApp initData HMAC and return the parsed user dict,
-    or None if validation fails or token is missing.
-    """
+    """Validate Telegram WebApp initData HMAC and return parsed user dict."""
     if not BOT_TOKEN:
         return None
     try:
@@ -34,16 +31,14 @@ def verify_telegram_init_data(init_data: str) -> Optional[dict]:
             return None
 
         check_string = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
+        secret_key   = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
+        expected     = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
 
-        secret_key    = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
-        expected_hash = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
-
-        if not hmac.compare_digest(expected_hash, received_hash):
+        if not hmac.compare_digest(expected, received_hash):
             logger.warning("initData HMAC mismatch.")
             return None
 
-        user_str = params.get("user", "{}")
-        return json.loads(user_str)
+        return json.loads(params.get("user", "{}"))
 
     except Exception as e:
         logger.warning(f"initData validation error: {e}")
@@ -51,7 +46,6 @@ def verify_telegram_init_data(init_data: str) -> Optional[dict]:
 
 
 def get_user_from_request() -> Optional[dict]:
-    """Extract and validate user from X-Init-Data header, form field, or query param."""
     init_data = (
         request.headers.get("X-Init-Data")
         or request.form.get("initData")
@@ -63,27 +57,16 @@ def get_user_from_request() -> Optional[dict]:
 
 
 def is_session_admin() -> bool:
-    """Check if the current Flask session belongs to an authenticated admin."""
     return bool(session.get("is_admin"))
 
 
 def admin_required(f):
-    """Decorator: allows access via valid Telegram initData OR authenticated browser session."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        # 1) Flask session (browser password login)
         if is_session_admin():
             return f(*args, **kwargs)
-
-        # 2) Telegram WebApp initData
         user = get_user_from_request()
         if user and int(user.get("id", 0)) == ADMIN_ID:
             return f(*args, **kwargs)
-
-        logger.warning(f"Admin access denied — user: {user}, session: {dict(session)}")
-        return jsonify({
-            "error": "Access Denied",
-            "message": "You are not authorised. Please log in.",
-            "code": "AUTH_REQUIRED"
-        }), 403
+        return jsonify({"error": "Access Denied", "code": "AUTH_REQUIRED"}), 403
     return decorated

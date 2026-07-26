@@ -155,3 +155,10 @@ def get_payment_info():
         }
     }
     return info
+
+
+# ============================================================
+# ALIASES — للتوافق مع bot_handlers.py
+# ============================================================
+SHOP_NAME   = MARKETPLACE_NAME
+USDT_ADDRESS = USDT_TRON_ADDRESS

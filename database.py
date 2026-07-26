@@ -467,6 +467,31 @@ def init_db() -> None:
     """)
 
     conn.commit()
+
+    # ── Accounts table (social-media accounts for sale) ─────
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS accounts (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            seller_id     INTEGER DEFAULT 0,
+            name          TEXT    NOT NULL,
+            description   TEXT    DEFAULT '',
+            price         REAL    NOT NULL DEFAULT 0,
+            category      TEXT    DEFAULT 'other',
+            status        TEXT    DEFAULT 'available',
+            image_path    TEXT    DEFAULT '',
+            email         TEXT    DEFAULT '',
+            password      TEXT    DEFAULT '',
+            followers     INTEGER DEFAULT 0,
+            tweets_count  INTEGER DEFAULT 0,
+            features      TEXT    DEFAULT '',
+            creation_year INTEGER,
+            currency      TEXT    DEFAULT 'USD',
+            created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_accounts_status ON accounts(status);
+    """)
+    conn.commit()
     logger.info("✅ Database schema initialized successfully")
 
     # Insert default settings
@@ -482,8 +507,8 @@ def _init_default_settings(conn: sqlite3.Connection) -> None:
     
     defaults = {
         "MARKETPLACE_NAME": ("Telegram Marketplace", "string"),
-        "COMMISSION_TYPE": ("percentage", "string"),  -- percentage, fixed, both
-        "COMMISSION_PERCENT": ("10", "number"),  -- 10%
+        "COMMISSION_TYPE": ("percentage", "string"),    # percentage, fixed, both
+        "COMMISSION_PERCENT": ("10", "number"),         # 10%
         "COMMISSION_FIXED": ("0", "number"),
         "COMMISSION_MIN": ("0", "number"),
         "COMMISSION_MAX": ("0", "number"),
@@ -762,9 +787,17 @@ def create_order(listing_id: int, buyer_id: int, seller_id: int,
 
 
 def get_order(order_id: int) -> Optional[Dict]:
-    """Get order by ID."""
+    """Get order by ID, joined with account credentials for delivery."""
     conn = get_conn()
-    row = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+    row = conn.execute(
+        """SELECT o.*, a.name AS account_name, a.price AS account_price,
+                  a.email AS account_email, a.password AS account_password,
+                  a.features AS account_features
+           FROM orders o
+           LEFT JOIN accounts a ON o.listing_id = a.id
+           WHERE o.id=?""",
+        (order_id,)
+    ).fetchone()
     return dict(row) if row else None
 
 
@@ -803,6 +836,134 @@ def get_marketplace_stats() -> Dict:
         "completed_orders": scalar("SELECT COUNT(*) FROM orders WHERE status='completed'"),
         "total_revenue": scalar("SELECT COALESCE(SUM(amount), 0) FROM orders WHERE status IN ('paid', 'completed')"),
         "total_commission": scalar("SELECT COALESCE(SUM(commission_amount), 0) FROM orders WHERE status IN ('paid', 'completed')"),
+    }
+
+
+# ============================================================
+# ACCOUNTS CRUD (social-media accounts for sale)
+# ============================================================
+
+def add_account(name: str, description: str = "", price: float = 0,
+                category: str = "other", image_path: str = "",
+                email: str = "", password: str = "",
+                followers: int = 0, tweets_count: int = 0,
+                features: str = "", creation_year: int = None,
+                currency: str = "USD", seller_id: int = 0) -> int:
+    """Insert a new account listing."""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        """INSERT INTO accounts
+           (seller_id, name, description, price, category, image_path,
+            email, password, followers, tweets_count, features,
+            creation_year, currency)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (seller_id, name, description, price, category, image_path,
+         email, password, followers, tweets_count, features,
+         creation_year, currency)
+    )
+    conn.commit()
+    return c.lastrowid
+
+
+def get_account(account_id: int) -> Optional[Dict]:
+    """Get a single account by ID."""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_all_accounts(status: str = None) -> List[Dict]:
+    """Get all accounts, optionally filtered by status."""
+    conn = get_conn()
+    if status:
+        rows = conn.execute(
+            "SELECT * FROM accounts WHERE status=? ORDER BY created_at DESC", (status,)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM accounts ORDER BY created_at DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_all_accounts_admin() -> List[Dict]:
+    """Get all accounts for admin (all statuses, includes private data)."""
+    return get_all_accounts()
+
+
+def update_account(account_id: int, **kwargs) -> None:
+    """Update account fields."""
+    allowed = {
+        "name", "description", "price", "category", "status",
+        "image_path", "email", "password", "followers", "tweets_count",
+        "features", "creation_year", "currency", "seller_id"
+    }
+    updates = {k: v for k, v in kwargs.items() if k in allowed and v is not None}
+    if not updates:
+        return
+    conn = get_conn()
+    updates["updated_at"] = datetime.now().isoformat()
+    set_clause = ", ".join(f"{k}=?" for k in updates)
+    values = list(updates.values()) + [account_id]
+    conn.execute(f"UPDATE accounts SET {set_clause} WHERE id=?", values)
+    conn.commit()
+
+
+def delete_account(account_id: int) -> None:
+    """Delete an account."""
+    conn = get_conn()
+    conn.execute("DELETE FROM accounts WHERE id=?", (account_id,))
+    conn.commit()
+
+
+# ============================================================
+# ORDERS HELPERS
+# ============================================================
+
+def get_all_orders() -> List[Dict]:
+    """Get all orders joined with account details."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT o.*, a.name AS account_name, a.price AS account_price,
+                  a.email AS account_email, a.password AS account_password,
+                  a.features AS account_features
+           FROM orders o
+           LEFT JOIN accounts a ON o.listing_id = a.id
+           ORDER BY o.created_at DESC"""
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_pending_orders() -> List[Dict]:
+    """Get pending orders joined with account details."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT o.*, a.name AS account_name, a.price AS account_price,
+                  a.email AS account_email, a.password AS account_password,
+                  a.features AS account_features
+           FROM orders o
+           LEFT JOIN accounts a ON o.listing_id = a.id
+           WHERE o.status='pending'
+           ORDER BY o.created_at DESC"""
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_stats() -> Dict:
+    """Get store stats in the format expected by bot_handlers."""
+    conn = get_conn()
+    def scalar(sql, *args):
+        return conn.execute(sql, args).fetchone()[0] or 0
+
+    return {
+        "total":         scalar("SELECT COUNT(*) FROM accounts"),
+        "available":     scalar("SELECT COUNT(*) FROM accounts WHERE status='available'"),
+        "sold":          scalar("SELECT COUNT(*) FROM accounts WHERE status='sold'"),
+        "reserved":      scalar("SELECT COUNT(*) FROM accounts WHERE status='reserved'"),
+        "revenue":       scalar("SELECT COALESCE(SUM(amount),0) FROM orders WHERE status='completed'"),
+        "total_orders":  scalar("SELECT COUNT(*) FROM orders"),
+        "pending_orders":scalar("SELECT COUNT(*) FROM orders WHERE status='pending'"),
     }
 
 

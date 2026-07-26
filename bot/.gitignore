@@ -1,0 +1,11 @@
+*.db
+*.db-shm
+*.db-wal
+*.pyc
+__pycache__/
+.env
+static/images/accounts/*.jpg
+static/images/accounts/*.png
+static/images/accounts/*.webp
+static/images/accounts/*.jpeg
+static/images/accounts/*.gif

@@ -1,63 +1,45 @@
-# 𝕏 Twitter X Shop — Bot + Web Admin
+# [Project name]
 
-## Overview
-A complete Telegram bot + Flask web app for selling old/rare Twitter/X accounts. Features:
-- **Telegram Bot**: Full inline account browsing, buy flow, and admin management
-- **Mini App (Web)**: Beautiful shop frontend customers see inside Telegram
-- **Admin Panel**: `/admin` URL with password-protected dashboard
-- **Auto Delivery**: When admin confirms payment → bot auto-sends credentials to buyer
+_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+
+## Run & Operate
+
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm run typecheck` — full typecheck across all packages
+- `pnpm run build` — typecheck + build all packages
+- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
+- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
-- Python 3.12
-- Flask 3.x + Flask-CORS
-- python-telegram-bot 20.7 (async polling)
-- SQLite (WAL mode, thread-safe)
-- Vanilla JS + Cairo font (no build step)
 
-## Running
-```bash
-python main.py
-```
-Flask starts on port 5000. Bot starts in a background thread (requires `BOT_TOKEN`).
+- pnpm workspaces, Node.js 24, TypeScript 5.9
+- API: Express 5
+- DB: PostgreSQL + Drizzle ORM
+- Validation: Zod (`zod/v4`), `drizzle-zod`
+- API codegen: Orval (from OpenAPI spec)
+- Build: esbuild (CJS bundle)
 
-## Environment Secrets Required
-| Secret | Description |
-|--------|-------------|
-| `BOT_TOKEN` | Telegram bot token from @BotFather |
-| `SESSION_SECRET` | Flask session secret (already set) |
-| `ADMIN_PASSWORD` | Web admin panel password (default: `admin1234`) |
-| `ADMIN_ID` | Telegram user ID of admin (default: 8989271393) |
-| `ADMIN_USERNAME` | Admin Telegram username (default: l825h) |
-| `WEBAPP_URL` | HTTPS URL of this app for Telegram WebApp buttons |
+## Where things live
 
-## Key Files
-- `main.py` — Entry point, starts Flask + bot thread
-- `bot_handlers.py` — All Telegram bot logic, admin conversation flows
-- `bot_keyboards.py` — Premium keyboard layouts
-- `database.py` — SQLite schema + CRUD (auto-migrates new columns)
-- `flask_app.py` — REST API + page routes
-- `config.py` — Env var config
-- `auth_middleware.py` — Session + Telegram initData auth
-- `templates/index.html` — Customer shop mini app
-- `templates/admin.html` — Admin dashboard
+_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
 
-## Bot Commands
-- `/start` — Welcome + main menu
-- `/shop` — Browse available accounts
-- `/admin` — Admin panel (admin only)
-- `/cancel` — Cancel current operation
+## Architecture decisions
 
-## Admin Bot Flow (adding accounts)
-1. `/admin` → press "➕ إضافة حساب"
-2. Bot asks step-by-step: name → year → price → email → password → followers → tweets → features → description → photo
-3. Account saved with full details
-4. Send `/cancel` any time to abort
+_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
 
-## Order Flow
-1. User browses → presses buy → confirms
-2. Admin gets notification with ✅ Confirm / ❌ Reject buttons
-3. On confirm → bot automatically sends email+password to buyer
+## Product
 
-## User Preferences
-- RTL Arabic interface throughout
-- Dark premium theme (#0d1117 background)
+_Describe the high-level user-facing capabilities of this app once they exist._
+
+## User preferences
+
+_Populate as you build — explicit user instructions worth remembering across sessions._
+
+## Gotchas
+
+_Populate as you build — sharp edges, "always run X before Y" rules._
+
+## Pointers
+
+- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details

@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>𝕏 Twitter Account Shop</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+      --border: #30363d; --accent: #1d9bf0; --accent2: #8b5cf6;
+      --green: #3fb950; --red: #f85149; --yellow: #f0a519;
+      --text: #e6edf3; --muted: #7d8590; --card: #161b22;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Cairo', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+    .hidden { display: none !important; }
+
+    /* BG orbs */
+    .orbs { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.08; animation: orb-float 10s ease-in-out infinite; }
+    .orb-1 { width: 500px; height: 500px; background: var(--accent); top: -150px; right: -150px; }
+    .orb-2 { width: 350px; height: 350px; background: var(--accent2); bottom: 50px; left: -80px; animation-delay: -4s; }
+    .orb-3 { width: 200px; height: 200px; background: var(--green); top: 40%; left: 40%; animation-delay: -8s; }
+    @keyframes orb-float { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-30px) scale(1.05)} }
+
+    /* Header */
+    .header { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.92); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); }
+    .header-inner { display: flex; align-items: center; justify-content: space-between; height: 56px; padding: 0 16px; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 900; color: #fff; flex-shrink: 0; }
+    .logo-title { font-size: 14px; font-weight: 800; color: var(--text); }
+    .logo-sub   { font-size: 10px; color: var(--muted); }
+    .header-actions { display: flex; gap: 8px; }
+    .icon-btn { width: 36px; height: 36px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; color: var(--muted); display: flex; align-items: center; justify-content: center; transition: all .2s; }
+    .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Search */
+    .search-wrap { padding: 0 16px 10px; display: none; }
+    .search-wrap.open { display: block; }
+    .search-inner { display: flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; transition: border-color .2s; }
+    .search-inner:focus-within { border-color: var(--accent); }
+    .search-inner input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 14px; height: 40px; direction: rtl; }
+    .search-inner input::placeholder { color: var(--muted); }
+
+    /* Stats bar */
+    .stats-bar { padding: 8px 16px; position: relative; z-index: 1; }
+    .stats-inner { background: linear-gradient(135deg, rgba(29,155,240,.08), rgba(139,92,246,.08)); border: 1px solid rgba(29,155,240,.15); border-radius: 10px; padding: 8px 14px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    .stat-item { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
+    .stat-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot-green { background: var(--green); }
+    .dot-blue  { background: var(--accent); }
+
+    /* Filter pills */
+    .filter-bar { padding: 10px 16px; position: relative; z-index: 1; }
+    .filter-track { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+    .filter-track::-webkit-scrollbar { display: none; }
+    .pill { flex-shrink: 0; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 700; font-family: inherit; transition: all .2s; }
+    .pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .pill:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+
+    /* Grid */
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 0 16px 16px; position: relative; z-index: 1; }
+    @media (min-width: 480px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+
+    /* Card */
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; cursor: pointer; transition: transform .2s, border-color .2s, box-shadow .2s; animation: card-in .4s ease both; }
+    @keyframes card-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .card:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 8px 24px rgba(29,155,240,.15); }
+    .card-thumb { aspect-ratio: 16/9; background: var(--surface2); position: relative; overflow: hidden; }
+    .card-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .card-thumb-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 900; color: var(--muted); background: linear-gradient(135deg, var(--surface), var(--surface2)); }
+    .card-badge { position: absolute; top: 6px; right: 6px; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; }
+    .badge-available { background: rgba(63,185,80,.2); color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+    .badge-sold      { background: rgba(248,81,73,.2);  color: var(--red);   border: 1px solid rgba(248,81,73,.3); }
+    .badge-reserved  { background: rgba(240,165,25,.2); color: var(--yellow);border: 1px solid rgba(240,165,25,.3); }
+    .card-body { padding: 10px; }
+    .card-year  { font-size: 10px; color: var(--muted); margin-bottom: 2px; }
+    .card-name  { font-size: 13px; font-weight: 800; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card-meta  { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
+    .card-price { font-size: 14px; font-weight: 900; color: var(--accent); }
+    .card-followers { font-size: 10px; color: var(--muted); }
+
+    /* States */
+    .state { padding: 40px 16px; text-align: center; position: relative; z-index: 1; }
+    .state-icon { font-size: 48px; margin-bottom: 12px; }
+    .state-title { font-size: 16px; font-weight: 800; margin-bottom: 6px; }
+    .state-sub { font-size: 13px; color: var(--muted); }
+    .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); backdrop-filter: blur(6px); z-index: 200; display: flex; align-items: flex-end; opacity: 0; pointer-events: none; transition: opacity .3s; }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal { background: var(--surface); border-radius: 20px 20px 0 0; width: 100%; max-height: 90vh; overflow-y: auto; transform: translateY(100%); transition: transform .35s cubic-bezier(.4,0,.2,1); padding-bottom: env(safe-area-inset-bottom, 12px); }
+    .modal-overlay.open .modal { transform: translateY(0); }
+    .modal-drag { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 10px auto 0; }
+    .modal-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 16px 16px 8px; }
+    .modal-close { width: 32px; height: 32px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted); flex-shrink: 0; font-size: 18px; }
+    .modal-img { width: 100%; max-height: 220px; object-fit: cover; }
+    .modal-img-ph { width: 100%; height: 140px; background: linear-gradient(135deg, var(--surface), var(--surface2)); display: flex; align-items: center; justify-content: center; font-size: 48px; font-weight: 900; color: var(--muted); }
+    .modal-body { padding: 0 16px 16px; }
+    .modal-title { font-size: 20px; font-weight: 900; margin-bottom: 4px; }
+    .modal-price { font-size: 24px; font-weight: 900; color: var(--accent); margin-bottom: 12px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .info-pill { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; }
+    .info-label { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
+    .info-value { font-size: 14px; font-weight: 800; }
+    .modal-desc { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 16px; }
+    .modal-features { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .feature-tag { background: rgba(139,92,246,.12); border: 1px solid rgba(139,92,246,.25); border-radius: 20px; padding: 4px 12px; font-size: 11px; font-weight: 700; color: var(--accent2); }
+    .modal-actions { display: flex; flex-direction: column; gap: 8px; }
+    .btn-buy { width: 100%; padding: 14px; background: linear-gradient(135deg, var(--accent), #0ea5e9); color: #fff; border: none; border-radius: 12px; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer; transition: transform .15s; }
+    .btn-buy:hover { transform: translateY(-1px); }
+    .btn-buy:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-secondary { width: 100%; padding: 12px; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: 12px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: all .15s; }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Payment step inside modal */
+    .payment-step { display: none; }
+    .payment-step.active { display: block; }
+    .pay-option { display: flex; align-items: center; gap: 12px; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 12px; padding: 14px; cursor: pointer; margin-bottom: 10px; transition: all .2s; }
+    .pay-option:hover, .pay-option.selected { border-color: var(--accent); background: rgba(29,155,240,.06); }
+    .pay-icon { font-size: 24px; }
+    .pay-label { flex: 1; font-size: 14px; font-weight: 800; }
+    .pay-price { font-size: 13px; color: var(--muted); font-weight: 700; }
+    .usdt-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+    .usdt-addr { font-family: monospace; font-size: 12px; word-break: break-all; color: var(--accent); margin-top: 6px; cursor: pointer; }
+    .copy-hint { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+    /* Toast */
+    .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 20px; font-size: 13px; font-weight: 700; z-index: 500; opacity: 0; transition: all .3s; pointer-events: none; white-space: nowrap; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Competitions tab */
+    .tabs { display: flex; border-bottom: 1px solid var(--border); margin: 0 16px; position: relative; z-index: 1; }
+    .tab { flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* Competition cards */
+    .comp-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin: 0 16px 12px; cursor: pointer; transition: border-color .2s; animation: card-in .4s ease both; }
+    .comp-card:hover { border-color: var(--accent); }
+    .comp-thumb { width: 100%; height: 140px; object-fit: cover; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 48px; }
+    .comp-body { padding: 12px; }
+    .comp-title { font-size: 16px; font-weight: 900; margin-bottom: 6px; }
+    .comp-desc { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+    .comp-meta { display: flex; gap: 12px; align-items: center; }
+    .comp-badge { padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; background: rgba(63,185,80,.12); color: var(--green); border: 1px solid rgba(63,185,80,.2); }
+    .comp-progress { flex: 1; }
+    .comp-progress-label { font-size: 10px; color: var(--muted); margin-bottom: 3px; font-weight: 700; }
+    .comp-progress-bar { height: 5px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+    .comp-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 3px; transition: width .6s ease; }
+  </style>
+</head>
+<body>
+<div class="orbs">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-icon">𝕏</div>
+      <div>
+        <div class="logo-title" id="shopName">Twitter Shop</div>
+        <div class="logo-sub">حسابات قديمة الإنشاء</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="searchToggle" title="بحث">🔍</button>
+    </div>
+  </div>
+  <div class="search-wrap" id="searchWrap">
+    <div class="search-inner">
+      <span style="color:var(--muted)">🔍</span>
+      <input id="searchInput" type="text" placeholder="ابحث عن حساب..."/>
+      <button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px" id="searchClear">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" data-tab="shop">🛒 المتجر</div>
+  <div class="tab" data-tab="competitions">🏆 المسابقات</div>
+  <div class="tab" data-tab="invites">🎁 دعوتي</div>
+</div>
+
+<!-- ── SHOP TAB ── -->
+<div id="tab-shop">
+  <!-- Stats -->
+  <div class="stats-bar" id="statsBar" style="display:none">
+    <div class="stats-inner">
+      <div class="stat-item"><div class="stat-dot dot-green"></div><span id="statAvail">0</span> متاح</div>
+      <div class="stat-item"><div class="stat-dot dot-blue"></div><span id="statTotal">0</span> إجمالي</div>
+    </div>
+  </div>
+
+  <!-- Filter pills -->
+  <div class="filter-bar" id="filterBar" style="display:none">
+    <div class="filter-track" id="filterTrack">
+      <button class="pill active" data-year="all">الكل</button>
+    </div>
+  </div>
+
+  <div id="loadingState" class="state">
+    <div class="spinner"></div>
+    <div class="state-title">جاري التحميل...</div>
+  </div>
+  <div id="emptyState" class="state hidden">
+    <div class="state-icon">🕊️</div>
+    <div class="state-title">لا توجد نتائج</div>
+    <div class="state-sub">جرب تغيير الفلتر أو مصطلح البحث</div>
+  </div>
+  <div class="grid" id="accountsGrid"></div>
+</div>
+
+<!-- ── COMPETITIONS TAB ── -->
+<div id="tab-competitions" class="hidden">
+  <div id="compsLoading" class="state">
+    <div class="spinner"></div>
+    <div class="state-title">جاري التحميل...</div>
+  </div>
+  <div id="compsEmpty" class="state hidden">
+    <div class="state-icon">🏆</div>
+    <div class="state-title">لا توجد مسابقات نشطة</div>
+    <div class="state-sub">تابع الإعلانات القادمة</div>
+  </div>
+  <div id="compsList" style="padding-top:12px"></div>
+</div>
+
+<!-- ── INVITES TAB ── -->
+<div id="tab-invites" class="hidden" style="padding:16px;position:relative;z-index:1">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center">
+    <div style="font-size:36px;margin-bottom:8px">🎁</div>
+    <div style="font-size:18px;font-weight:900;margin-bottom:6px">رابط الدعوة الخاص بك</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:16px">كل شخص تدعوه يُحسب في رصيدك وفي المسابقات!</div>
+    <div id="inviteCount" style="font-size:28px;font-weight:900;color:var(--accent);margin-bottom:4px">0</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">إجمالي الدعوات</div>
+    <div id="inviteLinkBox" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;cursor:pointer;text-align:right">
+      <div style="font-size:10px;color:var(--muted);font-weight:700;margin-bottom:4px">رابطك الشخصي:</div>
+      <div id="inviteLink" style="font-size:12px;color:var(--accent);word-break:break-all;direction:ltr;text-align:left"></div>
+    </div>
+    <button class="btn-buy" id="copyLinkBtn" onclick="copyInviteLink()">📋 نسخ الرابط</button>
+  </div>
+</div>
+
+<!-- Account Detail Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal" id="modalContent">
+    <div class="modal-drag"></div>
+    <div id="modalStep1">
+      <div id="modalImg"></div>
+      <div class="modal-body">
+        <div class="modal-title" id="modalTitle"></div>
+        <div class="modal-price" id="modalPrice"></div>
+        <div class="info-grid" id="modalInfoGrid"></div>
+        <div class="modal-desc" id="modalDesc"></div>
+        <div class="modal-features" id="modalFeatures"></div>
+        <div class="modal-actions">
+          <button class="btn-buy" id="buyBtn" onclick="showPayStep()">🛒 اشتري هذا الحساب</button>
+          <button class="btn-secondary" onclick="closeModal()">✕ إغلاق</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalStep2" class="payment-step">
+      <div class="modal-body" style="padding-top:20px">
+        <div style="font-size:16px;font-weight:900;margin-bottom:4px">💳 اختر طريقة الدفع</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px" id="payTitle2"></div>
+        <div class="pay-option" onclick="selectPayment('stars')">
+          <div class="pay-icon">⭐</div>
+          <div>
+            <div class="pay-label">Telegram Stars</div>
+            <div class="pay-price" id="starsAmount"></div>
+          </div>
+        </div>
+        <div class="pay-option" onclick="selectPayment('usdt')">
+          <div class="pay-icon">💎</div>
+          <div>
+            <div class="pay-label">USDT (TRC20)</div>
+            <div class="pay-price" id="usdtAmount"></div>
+          </div>
+        </div>
+        <div class="modal-actions" style="margin-top:12px">
+          <button class="btn-secondary" onclick="backToStep1()">🔙 رجوع</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalStep3" class="payment-step">
+      <div class="modal-body" style="padding-top:20px">
+        <div style="font-size:16px;font-weight:900;margin-bottom:12px">💎 الدفع عبر USDT (TRC20)</div>
+        <div class="usdt-box">
+          <div style="font-size:12px;color:var(--muted);font-weight:700">عنوان المحفظة (TRC20):</div>
+          <div class="usdt-addr" id="usdtAddr" onclick="copyUsdt()"></div>
+          <div class="copy-hint">اضغط للنسخ</div>
+        </div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.6">
+          ⚠️ أرسل المبلغ المحدد بالضبط ثم اضغط الزر أدناه لإشعار الأدمن.
+        </div>
+        <button class="btn-buy" id="usdtSentBtn" onclick="confirmUsdtSent()">✅ أرسلت المبلغ — إشعار الأدمن</button>
+        <button class="btn-secondary" style="margin-top:8px" onclick="showPayStep()">🔙 رجوع</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); tg.enableClosingConfirmation(); tg.setHeaderColor?.('#0d1117'); }
+
+const haptic = t => tg?.HapticFeedback?.impactOccurred?.(t);
+
+// ── State ─────────────────────────────────────
+let allAccounts = [];
+let activeYear  = 'all';
+let searchQ     = '';
+let currentAcc  = null;
+let activeTab   = 'shop';
+let compsLoaded = false;
+
+// ── Shop name from server ─────────────────────
+fetch('/api/stats').then(r=>r.json()).then(s=>{
+  if(s.available !== undefined){
+    document.getElementById('statAvail').textContent = s.available;
+    document.getElementById('statTotal').textContent = s.total_accounts;
+    document.getElementById('statsBar').style.display = '';
+  }
+});
+
+// ── Tabs ──────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    activeTab = t.dataset.tab;
+    document.getElementById('tab-shop').classList.toggle('hidden', activeTab !== 'shop');
+    document.getElementById('tab-competitions').classList.toggle('hidden', activeTab !== 'competitions');
+    document.getElementById('tab-invites').classList.toggle('hidden', activeTab !== 'invites');
+    if (activeTab === 'competitions' && !compsLoaded) { loadCompetitions(); compsLoaded = true; }
+    if (activeTab === 'invites') loadInviteInfo();
+  });
+});
+
+// ── Load accounts ─────────────────────────────
+async function loadAccounts() {
+  try {
+    const res   = await fetch('/api/accounts');
+    allAccounts = await res.json();
+    buildFilters();
+    render();
+    document.getElementById('statsBar').style.display = '';
+    document.getElementById('filterBar').style.display = '';
+  } catch(e) {
+    document.getElementById('loadingState').innerHTML =
+      '<div class="state-icon">❌</div><div class="state-title">فشل التحميل</div><div class="state-sub">حاول مرة أخرى</div>';
+  }
+}
+
+function buildFilters() {
+  const years = [...new Set(allAccounts.map(a=>a.creation_year).filter(Boolean))].sort();
+  const track  = document.getElementById('filterTrack');
+  track.innerHTML = '<button class="pill active" data-year="all">الكل</button>';
+  years.forEach(y => {
+    const b = document.createElement('button');
+    b.className = 'pill'; b.dataset.year = y; b.textContent = y;
+    track.appendChild(b);
+  });
+  track.querySelectorAll('.pill').forEach(p => p.addEventListener('click', () => {
+    track.querySelectorAll('.pill').forEach(x => x.classList.remove('active'));
+    p.classList.add('active');
+    activeYear = p.dataset.year;
+    render();
+  }));
+}
+
+function render() {
+  const list = allAccounts.filter(a => {
+    const yearOk  = activeYear === 'all' || String(a.creation_year) === activeYear;
+    const queryOk = !searchQ || a.name.toLowerCase().includes(searchQ) ||
+                    (a.description||'').toLowerCase().includes(searchQ) ||
+                    String(a.creation_year||'').includes(searchQ);
+    return yearOk && queryOk;
+  });
+
+  document.getElementById('loadingState').classList.add('hidden');
+  document.getElementById('statAvail').textContent = allAccounts.filter(a=>a.status==='available').length;
+  document.getElementById('statTotal').textContent = allAccounts.length;
+
+  if (!list.length) {
+    document.getElementById('emptyState').classList.remove('hidden');
+    document.getElementById('accountsGrid').innerHTML = '';
+    return;
+  }
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('accountsGrid').innerHTML = list.map((a, i) => buildCard(a, i)).join('');
+  document.querySelectorAll('.card').forEach(el => {
+    el.addEventListener('click', () => { haptic('light'); openModal(+el.dataset.id); });
+  });
+}
+
+function buildCard(a, idx) {
+  const thumb = a.image
+    ? `<img src="${esc(a.image)}" alt="${esc(a.name)}" loading="lazy"/>`
+    : `<div class="card-thumb-ph">𝕏</div>`;
+  const delay = Math.min(idx * 40, 400);
+  const flw   = fmtNum(a.followers);
+  return `<div class="card" data-id="${a.id}" style="animation-delay:${delay}ms">
+    <div class="card-thumb">${thumb}<span class="card-badge badge-${a.status}">${statusLabel(a.status)}</span></div>
+    <div class="card-body">
+      ${a.creation_year ? `<div class="card-year">📅 ${a.creation_year}</div>` : ''}
+      <div class="card-name">${esc(a.name)}</div>
+      <div class="card-meta">
+        <div class="card-price">$${Number(a.price).toFixed(2)}</div>
+        ${flw ? `<div class="card-followers">👥 ${flw}</div>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── Modal ─────────────────────────────────────
+function openModal(id) {
+  currentAcc = allAccounts.find(a => a.id === id);
+  if (!currentAcc) return;
+  const a = currentAcc;
+
+  // Image
+  const imgEl = document.getElementById('modalImg');
+  if (a.image) {
+    imgEl.innerHTML = `<img class="modal-img" src="${esc(a.image)}" alt="${esc(a.name)}"/>`;
+  } else {
+    imgEl.innerHTML = `<div class="modal-img-ph">𝕏</div>`;
+  }
+
+  document.getElementById('modalTitle').textContent = a.name;
+  document.getElementById('modalPrice').textContent = `$${Number(a.price).toFixed(2)}`;
+  document.getElementById('payTitle2').textContent   = `${a.name} — $${Number(a.price).toFixed(2)}`;
+  document.getElementById('starsAmount').textContent = `${usdToStars(a.price)} نجمة`;
+  document.getElementById('usdtAmount').textContent  = `$${Number(a.price).toFixed(2)}`;
+  document.getElementById('usdtAddr').textContent    = window.USDT_ADDRESS || '...';
+
+  // Info grid
+  const infos = [];
+  if (a.creation_year) infos.push(['📅 سنة الإنشاء', a.creation_year]);
+  if (a.followers)     infos.push(['👥 المتابعون',   fmtNum(a.followers)]);
+  if (a.tweets_count)  infos.push(['🐦 التغريدات',   fmtNum(a.tweets_count)]);
+  infos.push(['📊 الحالة', statusLabel(a.status)]);
+  document.getElementById('modalInfoGrid').innerHTML = infos.map(([l,v]) =>
+    `<div class="info-pill"><div class="info-label">${l}</div><div class="info-value">${v}</div></div>`
+  ).join('');
+
+  document.getElementById('modalDesc').textContent = a.description || '';
+  const feat = (a.features || '').split(/[,،]+/).map(s=>s.trim()).filter(Boolean);
+  document.getElementById('modalFeatures').innerHTML = feat.map(f=>`<span class="feature-tag">⭐ ${esc(f)}</span>`).join('');
+
+  const buyBtn = document.getElementById('buyBtn');
+  buyBtn.disabled = a.status !== 'available';
+  buyBtn.textContent = a.status === 'available' ? '🛒 اشتري هذا الحساب' : '❌ غير متاح';
+
+  showStep(1);
+  const overlay = document.getElementById('modal');
+  overlay.classList.add('open');
+  if (tg) tg.BackButton.show();
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  currentAcc = null;
+  if (tg) tg.BackButton.hide();
+}
+
+function showStep(n) {
+  document.getElementById('modalStep1').style.display = n===1 ? '' : 'none';
+  document.getElementById('modalStep2').style.display = n===2 ? '' : 'none';
+  document.getElementById('modalStep3').style.display = n===3 ? '' : 'none';
+}
+
+function showPayStep() { showStep(2); haptic('light'); }
+function backToStep1()  { showStep(1); }
+
+let selectedPayMethod = null;
+function selectPayment(method) {
+  selectedPayMethod = method;
+  document.querySelectorAll('.pay-option').forEach(el => el.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  setTimeout(() => {
+    if (method === 'usdt') {
+      showStep(3);
+      fetch('/api/stats').then(r=>r.json()).catch(()=>{});
+    } else {
+      // Stars — notify via Telegram bot callback
+      showToast('افتح البوت لإتمام الدفع بالنجوم ⭐');
+      closeModal();
+    }
+  }, 200);
+}
+
+async function confirmUsdtSent() {
+  if (!currentAcc) return;
+  const btn = document.getElementById('usdtSentBtn');
+  btn.disabled = true; btn.textContent = '⏳ جاري الإرسال...';
+  try {
+    const initData = tg?.initData || '';
+    const resp = await fetch('/api/buy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Init-Data': initData },
+      body: JSON.stringify({ account_id: currentAcc.id, initData }),
+    });
+    const data = await resp.json();
+    if (data.success || data.order_id) {
+      closeModal();
+      showToast('✅ تم الإرسال! سيتم مراجعة دفعتك وتأكيدها قريباً.');
+      haptic('success');
+    } else {
+      showToast('❌ ' + (data.error || 'حدث خطأ'));
+      btn.disabled = false; btn.textContent = '✅ أرسلت المبلغ — إشعار الأدمن';
+    }
+  } catch(e) {
+    showToast('❌ تعذر الاتصال بالخادم');
+    btn.disabled = false; btn.textContent = '✅ أرسلت المبلغ — إشعار الأدمن';
+  }
+}
+
+// ── Competitions ──────────────────────────────
+async function loadCompetitions() {
+  document.getElementById('compsLoading').classList.remove('hidden');
+  document.getElementById('compsEmpty').classList.add('hidden');
+  document.getElementById('compsList').innerHTML = '';
+  try {
+    const res  = await fetch('/api/competitions');
+    const data = await res.json();
+    document.getElementById('compsLoading').classList.add('hidden');
+    if (!data.length) { document.getElementById('compsEmpty').classList.remove('hidden'); return; }
+    document.getElementById('compsList').innerHTML = data.map(buildCompCard).join('');
+  } catch(e) {
+    document.getElementById('compsLoading').innerHTML =
+      '<div class="state"><div class="state-icon">❌</div><div class="state-title">فشل تحميل المسابقات</div></div>';
+  }
+}
+
+function buildCompCard(c) {
+  const img = c.image
+    ? `<img class="comp-thumb" src="${esc(c.image)}" alt="${esc(c.title)}"/>`
+    : `<div class="comp-thumb">🏆</div>`;
+  const req  = c.required_invites || 15;
+  const part = c.participants || 0;
+  return `<div class="comp-card" style="position:relative;z-index:1">
+    ${img}
+    <div class="comp-body">
+      <div class="comp-title">${esc(c.title)}</div>
+      <div class="comp-desc">${esc(c.description||'')}</div>
+      <div class="comp-meta">
+        <div class="comp-badge">🎯 ${req} دعوة للفوز</div>
+        <div style="font-size:11px;color:var(--muted)">👥 ${part} مشارك</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── Invites ───────────────────────────────────
+let inviteLink = '';
+function loadInviteInfo() {
+  const user = tg?.initDataUnsafe?.user;
+  if (!user) {
+    document.getElementById('inviteLink').textContent = 'افتح من داخل تيليغرام لرؤية رابطك';
+    return;
+  }
+  // Link is generated server-side via bot — here we just show placeholder
+  const botUsername = window.BOT_USERNAME || '';
+  inviteLink = botUsername ? `https://t.me/${botUsername}?start=ref_` : 'افتح البوت واكتب /myinvites';
+  document.getElementById('inviteLink').textContent = inviteLink;
+}
+
+function copyInviteLink() {
+  if (!inviteLink) return;
+  navigator.clipboard?.writeText(inviteLink).catch(()=>{});
+  showToast('✅ تم نسخ الرابط!');
+  haptic('success');
+}
+
+function copyUsdt() {
+  const addr = document.getElementById('usdtAddr').textContent;
+  navigator.clipboard?.writeText(addr).catch(()=>{});
+  showToast('✅ تم نسخ العنوان!');
+}
+
+// ── Helpers ───────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtNum(n) {
+  n = parseInt(n||0);
+  if(n>=1000000) return (n/1000000).toFixed(1)+'M';
+  if(n>=1000)    return (n/1000).toFixed(1)+'K';
+  return n ? String(n) : '';
+}
+function usdToStars(usd) { return Math.max(Math.round(usd*50),1); }
+function statusLabel(s) {
+  return {available:'متاح', sold:'مباع', reserved:'محجوز'}[s] || s;
+}
+function showToast(msg, dur=3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+// Search
+document.getElementById('searchToggle').onclick = () => {
+  document.getElementById('searchWrap').classList.toggle('open');
+  if (document.getElementById('searchWrap').classList.contains('open'))
+    document.getElementById('searchInput').focus();
+};
+document.getElementById('searchInput').oninput = e => {
+  searchQ = e.target.value.toLowerCase().trim();
+  document.getElementById('searchClear').style.display = searchQ ? '' : 'none';
+  render();
+};
+document.getElementById('searchClear').onclick = () => {
+  searchQ = ''; document.getElementById('searchInput').value = '';
+  document.getElementById('searchClear').style.display = 'none';
+  render();
+};
+
+// Telegram back button
+if (tg) tg.BackButton.onClick(() => {
+  if (document.getElementById('modal').classList.contains('open')) closeModal();
+});
+
+// Close modal on backdrop click
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal')) closeModal();
+});
+
+// Handle URL param ?account=ID
+const urlAcc = new URLSearchParams(location.search).get('account');
+if (urlAcc) {
+  loadAccounts().then(() => {
+    setTimeout(() => {
+      const a = allAccounts.find(x => x.id == urlAcc);
+      if (a) openModal(a.id);
+    }, 300);
+  });
+} else {
+  loadAccounts();
+}
+</script>
+</body>
+</html>

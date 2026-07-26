@@ -57,6 +57,12 @@ def _fmt_account_public(a: dict) -> dict:
     }
 
 
+def _image_url(path: str):
+    if path and os.path.exists(path):
+        return "/" + path.replace("\\", "/")
+    return None
+
+
 def _get_buyer_from_request():
     """Extract buyer id and username from Telegram initData or return defaults."""
     buyer_id       = 0
@@ -272,8 +278,12 @@ def api_create_invoice():
 @app.route("/api/admin/accounts", methods=["GET"])
 @admin_required
 def api_admin_accounts():
-    page = int(request.args.get("page", 0))
+    status = request.args.get("status", "").strip()
     accs = get_all_accounts_admin()
+    if status:
+        accs = [a for a in accs if a.get("status") == status]
+    for a in accs:
+        a["image"] = _image_url(a.get("image_path"))
     return jsonify(accs)
 
 
@@ -352,7 +362,7 @@ def api_admin_delete_account(account_id):
 @app.route("/api/admin/orders", methods=["GET"])
 @admin_required
 def api_admin_orders():
-    return jsonify(get_pending_orders())
+    return jsonify(get_all_orders())
 
 
 @app.route("/api/admin/orders/<int:order_id>", methods=["PUT"])
@@ -391,6 +401,7 @@ def api_admin_get_competitions():
     result = []
     for c in comps:
         c["participants"] = get_competition_participants_count(c["id"])
+        c["image"] = _image_url(c.get("image_path"))
         result.append(c)
     return jsonify(result)
 

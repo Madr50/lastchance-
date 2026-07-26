@@ -548,15 +548,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 title=f"🐦 {acc['name']}",
                 description=f"حساب تويتر قديم • ${acc['price']:.2f}",
                 payload=f"account_{acc['id']}",
-                provider_token="",
                 currency="XTR",
                 prices=[LabeledPrice(label=acc['name'], amount=stars)],
             )
             update_account(acc_id, status='reserved')
             await query.answer("✅ تم إرسال فاتورة النجوم")
         except Exception as e:
-            logger.error(f"Stars invoice error: {e}")
-            await query.answer("❌ خطأ في إنشاء الفاتورة", show_alert=True)
+            err_text = str(e)
+            logger.error(f"Stars invoice error: {err_text}")
+            # إرسال الخطأ للأدمن لمعرفة السبب
+            try:
+                await context.bot.send_message(
+                    chat_id=ADMIN_ID,
+                    text=f"⚠️ خطأ فاتورة نجوم:\n<code>{err_text}</code>",
+                    parse_mode=ParseMode.HTML
+                )
+            except Exception:
+                pass
+            await query.answer(f"❌ خطأ: {err_text[:100]}", show_alert=True)
         return
 
     # ── Pay with USDT ───────────────────────────────────────

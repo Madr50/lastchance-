@@ -1,4 +1,5 @@
 # database.py — Production-grade marketplace database with full schema
+import os
 import sqlite3
 import logging
 import threading

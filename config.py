@@ -1,19 +1,35 @@
-# config.py
+# config.py — all settings from environment variables (NO unsafe defaults)
 import os
+import sys
 
-BOT_TOKEN      = os.environ.get("BOT_TOKEN", "")
-BOT_USERNAME   = os.environ.get("BOT_USERNAME", "")   # e.g. "MyShopBot" (without @)
-ADMIN_ID       = int(os.environ.get("ADMIN_ID", "8989271393"))
-ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "l825h")
-SHOP_NAME      = os.environ.get("SHOP_NAME", "نادر X | حسابات تويتر المميزة")
+def _require(key: str) -> str:
+    """Get env var or exit with a clear error message."""
+    val = os.environ.get(key, "").strip()
+    if not val:
+        print(
+            f"\n❌ FATAL: Environment variable '{key}' is required but not set.\n"
+            f"   Go to Replit Secrets (🔒) and add '{key}'.\n"
+            f"   The bot will NOT start until all required secrets are configured.\n",
+            file=sys.stderr
+        )
+        sys.exit(1)
+    return val
+
+
+# ── Required secrets ──────────────────────────────────────────────────────────
+BOT_TOKEN      = _require("BOT_TOKEN")
+ADMIN_PASSWORD = _require("ADMIN_PASSWORD")   # Browser admin panel login
+
+# ── Optional with safe defaults ────────────────────────────────────────────────
+BOT_USERNAME   = os.environ.get("BOT_USERNAME", "")
+ADMIN_ID       = int(os.environ.get("ADMIN_ID", "0") or "0")
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "")
+SHOP_NAME      = os.environ.get("SHOP_NAME", "متجر ريبر X | حسابات X النادرة")
 DB_NAME        = os.environ.get("DB_NAME", "shop.db")
 ACCOUNTS_DIR   = "static/images/accounts"
 
-# Admin panel password (browser login). Set ADMIN_PASSWORD env var to secure it.
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin1234")
-
 # عنوان USDT TRC20 لاستقبال المدفوعات
-USDT_ADDRESS = os.environ.get("USDT_ADDRESS", "TJmRUQ7qhLR22E15Q8egyRyJaFFJxERMxy")
+USDT_ADDRESS = os.environ.get("USDT_ADDRESS", "")
 
 # Number of invites required to win a competition
 COMPETITION_REQUIRED_INVITES = int(os.environ.get("COMPETITION_REQUIRED_INVITES", "15"))

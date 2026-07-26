@@ -1,49 +1,60 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+.venv/
+venv/
+env/
+ENV/
 
-# compiled output
-dist
-tmp
-out-tsc
+# Database — NEVER commit these
+shop.db
+shop.db-wal
+shop.db-shm
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Environment secrets
+.env
+.env.local
+.env.production
+.env.*
+!.env.example
+
+# Replit / IDE
+.cache/
+.local/
+.upm/
+.replit.bak
+
+# Node (leftover)
+node_modules/
+dist/
+out-tsc/
 *.tsbuildinfo
-.expo
-.expo-shared
+.expo/
+.expo-shared/
 
-# dependencies
-node_modules
-
-# IDEs and editors
+# IDEs
 /.idea
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
-
-# IDE - VSCode
 .vscode/*
 !.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-
-# misc
-/.sass-cache
-/connect.lock
-/coverage
-/libpeerconnection.log
-npm-debug.log
-yarn-error.log
-testem.log
-/typings
-
-# System Files
 .DS_Store
 Thumbs.db
 
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
-
-# Replit
-.cache/
-.local/
+# Uploads (user content, not committed)
+static/images/accounts/*.jpg
+static/images/accounts/*.jpeg
+static/images/accounts/*.png
+static/images/accounts/*.gif
+static/images/accounts/*.webp

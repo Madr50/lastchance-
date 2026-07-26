@@ -465,3 +465,41 @@ def api_admin_delete_competition(comp_id):
 @admin_required
 def api_admin_comp_leaderboard(comp_id):
     return jsonify(get_competition_leaderboard(comp_id, 50))
+
+
+# ══════════════════════════════════════════════
+#  CUSTOMER ORDERS (Mini App)
+# ══════════════════════════════════════════════
+
+@app.route("/api/orders", methods=["POST"])
+def api_create_order():
+    """Alias for /api/buy — create a USDT order from the Mini App."""
+    return api_buy()
+
+
+@app.route("/api/orders/<int:order_id>/confirm", methods=["POST"])
+def api_confirm_order(order_id):
+    """Mark USDT as sent and notify admin."""
+    order = get_order(order_id)
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+
+    update_order(order_id, "pending_confirmation")
+
+    account = get_account(order["account_id"])
+    buyer_username = order.get("buyer_username") or "unknown"
+    acc_name  = account["name"]  if account else "—"
+    acc_price = f"${account['price']:.2f}" if account else "—"
+
+    msg = (
+        f"💎 <b>إشعار دفع USDT #{order_id}</b>\n"
+        f"الحساب: {acc_name}\n"
+        f"المشتري: @{buyer_username}\n"
+        f"السعر: {acc_price}\n\n"
+        f"⏳ في انتظار تأكيد الأدمن."
+    )
+    threading.Thread(
+        target=_notify_admin_async, args=(msg, order_id), daemon=True
+    ).start()
+
+    return jsonify({"success": True, "order_id": order_id})

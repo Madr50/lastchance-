@@ -4,7 +4,7 @@
 'use strict';
 
 const tg    = window.Telegram?.WebApp;
-const ADMIN = 8989271393;
+
 const toast = document.getElementById('toast');
 let toastT  = null;
 let accountsData = [];

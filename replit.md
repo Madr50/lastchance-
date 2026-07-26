@@ -1,45 +1,62 @@
-# [Project name]
+# متجر ريبر X — بوت تيليجرام لبيع حسابات X النادرة
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+بوت تيليجرام احترافي لبيع حسابات تويتر/X القديمة والنادرة، مع Mini App للتصفح، لوحة تحكم ويب، نظام دعوات، ومسابقات.
 
-## Run & Operate
+## تشغيل المشروع
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `python main.py` — تشغيل Flask + بوت التيليجرام معاً (التطوير)
+- `gunicorn wsgi:app` — بيئة الإنتاج (Render / VPS)
 
-## Stack
+## Secrets المطلوبة (Replit Secrets 🔒)
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+| المتغير | الوصف | إجباري |
+|---|---|---|
+| `BOT_TOKEN` | توكن البوت من @BotFather | ✅ |
+| `ADMIN_PASSWORD` | كلمة مرور لوحة التحكم المتصفح | ✅ |
+| `SESSION_SECRET` | مفتاح جلسة Flask (عشوائي طويل) | ✅ |
+| `ADMIN_ID` | Telegram ID الأدمن | مستحسن |
+| `ADMIN_USERNAME` | يوزر الأدمن بدون @ | مستحسن |
+| `BOT_USERNAME` | يوزر البوت بدون @ | مستحسن |
+| `USDT_ADDRESS` | عنوان محفظة USDT TRC20 | للدفع |
+| `SHOP_NAME` | اسم المتجر | اختياري |
 
-## Where things live
+## المكدس التقني
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- **Backend**: Python 3, Flask 3, python-telegram-bot 21
+- **Database**: SQLite (WAL mode, thread-safe)
+- **Web**: Jinja2 templates + Vanilla JS + CSS
+- **Deploy**: Gunicorn (wsgi.py)
 
-## Architecture decisions
+## بنية الملفات
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
-
-## Product
-
-_Describe the high-level user-facing capabilities of this app once they exist._
+```
+main.py          — نقطة البداية (Flask + Bot thread)
+wsgi.py          — Gunicorn entry point
+flask_app.py     — كل API endpoints + تسليم الصفحات
+bot_handlers.py  — منطق البوت (commands + callbacks)
+bot_keyboards.py — كل InlineKeyboardMarkup layouts
+database.py      — SQLite helpers (thread-safe)
+config.py        — إعدادات من env vars (لا defaults غير آمنة)
+auth_middleware.py — Telegram initData validation + session auth
+templates/
+  index.html     — Mini App (Telegram WebApp) لتصفح الحسابات
+  admin.html     — لوحة التحكم (متصفح عادي)
+static/
+  css/           — shop.css, admin.css
+  js/            — shop.js, admin.js
+  images/accounts/ — صور الحسابات (مُستثناة من git)
+```
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- اللغة العربية في الواجهة والمراسلات
+- اسم البوت: متجر ريبر X
+- البوت username: (يُعيَّن من ADMIN_USERNAME)
+- الثيم: Dark premium (أسود/ذهبي/أزرق)
 
-## Gotchas
+## ملاحظات مهمة
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- **shop.db** مُستثنى من git — لا ترفعه
+- كل الـ secrets من Replit Secrets فقط — لا hardcoding
+- البوت يعمل على polling (مناسب للتطوير)؛ للإنتاج يُفضَّل webhook
+- سلوك تعديل الرسالة (edit_message) مُطبَّق في كل التنقلات

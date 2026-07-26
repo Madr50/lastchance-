@@ -548,6 +548,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 title=f"🐦 {acc['name']}",
                 description=f"حساب تويتر قديم • ${acc['price']:.2f}",
                 payload=f"account_{acc['id']}",
+                provider_token="",
                 currency="XTR",
                 prices=[LabeledPrice(label=acc['name'], amount=stars)],
             )
@@ -570,13 +571,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         update_account(acc_id, status='reserved')
 
         text = (
-            f"💎 <b>الدفع عبر USDT (TRC20)</b>\n"
+            f"💎 <b>الدفع عبر USDT (Optimism)</b>\n"
             f"{_divider()}\n\n"
             f"📦 الحساب: <b>{_html.escape(acc['name'])}</b>\n"
             f"💰 المبلغ: <b>${acc['price']:.2f}</b>\n\n"
+            f"🔗 الشبكة: <b>Optimism (OP)</b>\n"
             f"عنوان المحفظة:\n"
             f"<code>{USDT_ADDRESS}</code>\n\n"
-            f"⚠️ أرسل المبلغ بالضبط ثم اضغط الزر أدناه لإشعار الأدمن."
+            f"⚠️ أرسل المبلغ بالضبط على شبكة Optimism ثم اضغط الزر أدناه لإشعار الأدمن."
         )
         await _safe_edit(query, text, usdt_payment_keyboard(order_id, USDT_ADDRESS))
         return

@@ -28,8 +28,8 @@ SHOP_NAME      = os.environ.get("SHOP_NAME", "متجر ريبر X | حسابات
 DB_NAME        = os.environ.get("DB_NAME", "shop.db")
 ACCOUNTS_DIR   = "static/images/accounts"
 
-# عنوان USDT TRC20 لاستقبال المدفوعات
-USDT_ADDRESS = os.environ.get("USDT_ADDRESS", "")
+# عنوان USDT Optimism لاستقبال المدفوعات
+USDT_ADDRESS = os.environ.get("USDT_ADDRESS", "0xfcbc4e43506fd1c16175d3beb1e25c164d780fba")
 
 # Number of invites required to win a competition
 COMPETITION_REQUIRED_INVITES = int(os.environ.get("COMPETITION_REQUIRED_INVITES", "15"))

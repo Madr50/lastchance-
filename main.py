@@ -87,8 +87,12 @@ if __name__ == "__main__":
     from database import init_db
     init_db()
 
-    bot_thread = threading.Thread(target=run_bot, daemon=True, name="telegram-bot")
-    bot_thread.start()
+    # Set DISABLE_BOT=true to run Flask-only (no polling conflict when bot runs elsewhere)
+    if os.environ.get("DISABLE_BOT", "").lower() in ("1", "true", "yes"):
+        logger.info("🔕 Bot polling disabled (DISABLE_BOT=true) — Flask only mode.")
+    else:
+        bot_thread = threading.Thread(target=run_bot, daemon=True, name="telegram-bot")
+        bot_thread.start()
 
     from flask_app import app as flask_app
     port = int(os.environ.get("PORT", 5000))

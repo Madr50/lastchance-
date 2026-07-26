@@ -5,7 +5,7 @@ BOT_TOKEN      = os.environ.get("BOT_TOKEN", "")
 BOT_USERNAME   = os.environ.get("BOT_USERNAME", "")   # e.g. "MyShopBot" (without @)
 ADMIN_ID       = int(os.environ.get("ADMIN_ID", "8989271393"))
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "l825h")
-SHOP_NAME      = os.environ.get("SHOP_NAME", "Twitter X Shop")
+SHOP_NAME      = os.environ.get("SHOP_NAME", "نادر X | حسابات تويتر المميزة")
 DB_NAME        = os.environ.get("DB_NAME", "shop.db")
 ACCOUNTS_DIR   = "static/images/accounts"
 

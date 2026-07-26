@@ -1,0 +1,78 @@
+ble public dns checks.
+[Wed Jul 22 17:08:47 UTC 2026] See: https://github.com/acmesh-official/acme.sh/wiki/dnscheck
+[Wed Jul 22 17:08:47 UTC 2026] Checking jsusuusususis.duckdns.org for _acme-challenge.jsusuusususis.duckdns.org
+[Wed Jul 22 17:08:48 UTC 2026] Success for domain jsusuusususis.duckdns.org '_acme-challenge.jsusuusususis.duckdns.org'.
+[Wed Jul 22 17:08:48 UTC 2026] All checks succeeded
+[Wed Jul 22 17:08:48 UTC 2026] Verifying: jsusuusususis.duckdns.org
+[Wed Jul 22 17:08:48 UTC 2026] Processing. The CA is processing your order, please wait. (1/30)
+[Wed Jul 22 17:08:52 UTC 2026] Success
+[Wed Jul 22 17:08:52 UTC 2026] Removing DNS records.
+[Wed Jul 22 17:08:52 UTC 2026] Removing txt: RPQFF-NDQq2okqs5HLaULwSMfg3n6i_sXVMBnmp9H9U for domain: _acme-challenge.jsusuusususis.duckdns.org
+[Wed Jul 22 17:08:52 UTC 2026] Trying to remove TXT record
+[Wed Jul 22 17:08:53 UTC 2026] TXT record has been successfully removed from your DuckDNS domain.
+[Wed Jul 22 17:08:53 UTC 2026] Successfully removed
+[Wed Jul 22 17:08:53 UTC 2026] Verification finished, beginning signing.
+[Wed Jul 22 17:08:53 UTC 2026] Let's finalize the order.
+[Wed Jul 22 17:08:53 UTC 2026] Le_OrderFinalize='https://acme.zerossl.com/v2/DV90/order/tNvUSwY-2bXvEmTVNohJUg/finalize'
+[Wed Jul 22 17:08:54 UTC 2026] Order status is 'processing', let's sleep and retry.
+[Wed Jul 22 17:08:54 UTC 2026] Sleeping for 15 seconds then retrying
+[Wed Jul 22 17:09:10 UTC 2026] Polling order status: https://acme.zerossl.com/v2/DV90/order/tNvUSwY-2bXvEmTVNohJUg
+[Wed Jul 22 17:09:12 UTC 2026] Downloading cert.
+[Wed Jul 22 17:09:12 UTC 2026] Le_LinkCert='https://acme.zerossl.com/v2/DV90/cert/8RLYGSPdwFD8TX0hAbESLA'
+[Wed Jul 22 17:09:12 UTC 2026] Cert success.
+-----BEGIN CERTIFICATE-----
+MIIDlDCCAzmgAwIBAgIQT6/Bj8H5zq/qEu6mT+Y+uzAKBggqhkjOPQQDAjBGMQsw
+CQYDVQQGEwJBVDEVMBMGA1UEChMMWmVyb1NTTCBHbWJIMSAwHgYDVQQDExdaZXJv
+U1NMIEVDQyBEViBTU0wgQ0EgMjAeFw0yNjA3MjIwMDAwMDBaFw0yNjEwMjAyMzU5
+NTlaMCQxIjAgBgNVBAMTGWpzdXN1dXN1c3VzaXMuZHVja2Rucy5vcmcwWTATBgcq
+hkjOPQIBBggqhkjOPQMBBwNCAARCiveotJY3ZRkhdWugkF0TOndKiyT/I6ozDHUL
+tK4ThSz+N3RBld51fQTw/44nrSRD/CV1b2duBgm/r0tpsZVvo4ICKTCCAiUwHwYD
+VR0jBBgwFoAUlEWf2lFHcdVzrqwdqwhyEm2tfGIwHQYDVR0OBBYEFA7ugUhGN6FE
+xPI0P+XKLZ2OH7CtMA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMBMGA1Ud
+JQQMMAoGCCsGAQUFBwMBMBMGA1UdIAQMMAowCAYGZ4EMAQIBMG4GCCsGAQUFBwEB
+BGIwYDA5BggrBgEFBQcwAoYtaHR0cDovL2NydC5zZWN0aWdvLmNvbS9aZXJvU1NM
+RUNDRFZTU0xDQTIuY3J0MCMGCCsGAQUFBzABhhdodHRwOi8vb2NzcC5zZWN0aWdv
+LmNvbTCCAQMGCisGAQQB1nkCBAIEgfQEgfEA7wB1ANdtfRDRp/V3wsfpX9cAv/mC
+yTNaZeHQswFzF8DIxWl3AAABn4rNRRMAAAQDAEYwRAIgC3kROHExi32ZyA/i4Wn7
+GxzcoNjzZcp7j71BrwNnG1QCIE+yqeKwTM8u5AvazWCpm0rFCt1mO4+UPhKVbfWm
+LMaXAHYAyKPEf8ezrbk1awE/anoSbeM6TkOlxkb5l605dZkdz5oAAAGfis1FJAAA
+BAMARzBFAiEAkUAFlOh1pp07tHoXs5yZuKJ6GMuoHORqf/AvShDOhjgCIDsvuHlq
+B0h/IH9hTW2rVqcQHoBm0bqH2IEMou/wKYuoMCQGA1UdEQQdMBuCGWpzdXN1dXN1
+c3VzaXMuZHVja2Rucy5vcmcwCgYIKoZIzj0EAwIDSQAwRgIhAPcadsm/Rax7E4mN
+vPecspF65RKNMowRuCJZhbXfhq/FAiEAwoPGG3uIVYpRfOA4fG0E62zucktbPDka
+OuTYNKXFReA=
+-----END CERTIFICATE-----
+[Wed Jul 22 17:09:12 UTC 2026] Your cert is in: /home/ec2-user/.acme.sh/jsusuusususis.duckdns.org_ecc/jsusuusususis.duckdns.org.cer
+[Wed Jul 22 17:09:12 UTC 2026] Your cert key is in: /home/ec2-user/.acme.sh/jsusuusususis.duckdns.org_ecc/jsusuusususis.duckdns.org.key
+[Wed Jul 22 17:09:12 UTC 2026] The intermediate CA cert is in: /home/ec2-user/.acme.sh/jsusuusususis.duckdns.org_ecc/ca.cer
+[Wed Jul 22 17:09:12 UTC 2026] And the full-chain cert is in: /home/ec2-user/.acme.sh/jsusuusususis.duckdns.org_ecc/fullchain.cer
+[Wed Jul 22 17:09:13 UTC 2026] ARI suggestedWindow: 2026-10-05T23:59:59Z to 2026-10-07T23:59:59Z
+[Wed Jul 22 17:09:13 UTC 2026] Next renewal time picked from ARI window: 2026-10-06T17:09:12Z
+[Wed Jul 22 17:09:13 UTC 2026] The domain 'jsusuusususis.duckdns.org' seems to already have an ECC cert, let's use it.
+[Wed Jul 22 17:09:13 UTC 2026] Installing key to: /etc/nginx/ssl/key.pem
+touch: cannot touch '/etc/nginx/ssl/key.pem': Permission denied
+[1] 1162181
+✅ كل شيء جاهز
+[ec2-user@ip-172-31-28-54 bye]$ 2026-07-22 17:09:13,536 [INFO] database: ✅ Database initialised.
+2026-07-22 17:09:13,545 [INFO] __main__: 🌐 Starting Flask on port 5000
+ * Serving Flask app 'flask_app'
+ * Debug mode: off
+2026-07-22 17:09:13,575 [INFO] werkzeug: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.31.28.54:5000
+2026-07-22 17:09:13,575 [INFO] werkzeug: Press CTRL+C to quit
+2026-07-22 17:09:13,729 [INFO] __main__: 🤖 Telegram bot polling started.
+2026-07-22 17:09:13,808 [INFO] httpx: HTTP Request: POST https://api.telegram.org/bot8789831883:AAHSlomMorHg9Zhl8tGcygwfOFwErGm4TEM/getMe "HTTP/1.1 200 OK"
+2026-07-22 17:09:13,840 [INFO] httpx: HTTP Request: POST https://api.telegram.org/bot8789831883:AAHSlomMorHg9Zhl8tGcygwfOFwErGm4TEM/deleteWebhook "HTTP/1.1 200 OK"
+2026-07-22 17:09:13,840 [INFO] telegram.ext.Application: Application started
+2026-07-22 17:09:23,914 [INFO] httpx: HTTP Request: POST https://api.telegram.org/bot8789831883:AAHSlomMorHg9Zhl8tGcygwfOFwErGm4TEM/getUpdates "HTTP/1.1 200 OK"
+2026-07-22 17:09:33,940 [INFO] httpx: HTTP Request: POST https://api.telegram.org/bot8789831883:AAHSlomMorHg9Zhl8tGcygwfOFwErGm4TEM/getUpdates "HTTP/1.1 200 OK"
+2026-07-22 17:09:43,966 [INFO] httpx: HTTP Request: POST https://api.telegram.org/bot8789831883:AAHSlomMorHg9Zhl8tGcygwfOFwErGm4TEM/getUpdates "HTTP/1.1 200 OK"
+2026-07-22 17:09:53,995 [INFO] httpx: HTTP Request: POST https://api.telegram.org/bot8789831883:AAHSlomMorHg9Zhl8tGcygwfOFwErGm4TEM/getUpdates "HTTP/1.1 200 OK"
+2026-07-22 17:10:04,020 [INFO] httpx: HTTP Request: POST https://api.telegram.org/bot8789831883:AAHSlomMorHg9Zhl8tGcygwfOFwErGm4TEM/getUpdates "HTTP/1.1 200 OK"
+[ec2-user@ip-172-31-28-54 bye]$ 2026-07-22 17:10:14,048 [INFO] httpx: HTTP Request: POST https://api.telegram.org/bot8789831883:AAHSlomMorHg9Zhl8tGcygwfOFwErGm4TEM/getUpdates "HTTP/1.1 200 OK"
+2026-07-22 17:10:16,855 [INFO] httpx: HTTP Request: POST https://api.telegram.org/bot8789831883:AAHSlomMorHg9Zhl8tGcygwfOFwErGm4TEM/getUpdates "HTTP/1.1 200 OK"
+2026-07-22 17:10:16,979 [INFO] httpx: HTTP Request: POST https://api.telegram.org/bot8789831883:AAHSlomMorHg9Zhl8tGcygwfOFwErGm4TEM/sendMessage "HTTP/1.1 200 OK"
+2026-07-22 17:10:26,883 [INFO] httpx: HTTP Request: POST https://api.telegram.org/bot8789831883:AAHSlomMorHg9Zhl8tGcygwfOFwErGm4TEM/getUpdates "HTTP/1.1 200 OK"
+[ec2-user@ip-172-31-28-54 bye]$ 2026-07-22 17:10:36,908 [INFO] 

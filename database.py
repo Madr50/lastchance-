@@ -130,6 +130,19 @@ def init_db() -> None:
             except Exception as e:
                 logger.warning(f"Migration users.{col} skipped: {e}")
 
+    # ── Safe migrations: orders ──────────────────────────────
+    existing_ord = {row[1] for row in conn.execute("PRAGMA table_info(orders)").fetchall()}
+    orders_new_cols = {
+        "account_id": "INTEGER",
+    }
+    for col, typedef in orders_new_cols.items():
+        if col not in existing_ord:
+            try:
+                conn.execute(f"ALTER TABLE orders ADD COLUMN {col} {typedef}")
+                logger.info(f"Migrated orders: added column {col}")
+            except Exception as e:
+                logger.warning(f"Migration orders.{col} skipped: {e}")
+
     import os
     admin_id       = int(os.environ.get("ADMIN_ID", "8989271393"))
     admin_username = os.environ.get("ADMIN_USERNAME", "l825h")

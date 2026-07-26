@@ -101,19 +101,34 @@ def init_db() -> None:
         );
     """)
 
-    # ── Safe migrations ──────────────────────────────────────
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(accounts)").fetchall()}
-    new_cols = {
+    # ── Safe migrations: accounts ────────────────────────────
+    existing_acc = {row[1] for row in conn.execute("PRAGMA table_info(accounts)").fetchall()}
+    accounts_new_cols = {
         "email":        "TEXT",
         "password":     "TEXT",
         "followers":    "INTEGER DEFAULT 0",
         "tweets_count": "INTEGER DEFAULT 0",
         "features":     "TEXT",
     }
-    for col, typedef in new_cols.items():
-        if col not in existing:
+    for col, typedef in accounts_new_cols.items():
+        if col not in existing_acc:
             conn.execute(f"ALTER TABLE accounts ADD COLUMN {col} {typedef}")
-            logger.info(f"Migrated: added column {col}")
+            logger.info(f"Migrated accounts: added column {col}")
+
+    # ── Safe migrations: users ───────────────────────────────
+    existing_usr = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    users_new_cols = {
+        "ref_code":     "TEXT",
+        "invited_by":   "INTEGER",
+        "total_invites":"INTEGER DEFAULT 0",
+    }
+    for col, typedef in users_new_cols.items():
+        if col not in existing_usr:
+            try:
+                conn.execute(f"ALTER TABLE users ADD COLUMN {col} {typedef}")
+                logger.info(f"Migrated users: added column {col}")
+            except Exception as e:
+                logger.warning(f"Migration users.{col} skipped: {e}")
 
     import os
     admin_id       = int(os.environ.get("ADMIN_ID", "8989271393"))

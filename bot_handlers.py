@@ -548,6 +548,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 title=f"🐦 {acc['name']}",
                 description=f"حساب تويتر قديم • ${acc['price']:.2f}",
                 payload=f"account_{acc['id']}",
+                provider_token="",
                 currency="XTR",
                 prices=[LabeledPrice(label=acc['name'], amount=stars)],
             )
